@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Winter Gelato Shop - GameBoy Edition</title>
+    <style>
+        /* =========================================
+           1. GameBoy 外壳样式 (保持不变)
+           ========================================= */
+        :root {
+            --gb-body: #c0c6c8;
+            --gb-screen-lens: #545963;
+            --gb-screen-bg: #111; /* 改成深色背景适配你的游戏 */
+            --gb-btn-red: #8f1338;
+            --gb-btn-dark: #272a2e;
+            --pixel-font: 'Courier New', Courier, monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        body {
+            margin: 0; padding: 0;
+            background-color: #111;
+            height: 100vh; width: 100vw;
+            overflow: hidden;
+            display: flex; justify-content: center; align-items: center;
+            font-family: var(--pixel-font);
+        }
+
+        #gameboy-container {
+            position: relative;
+            width: 320px; height: 540px;
+            background-color: var(--gb-body);
+            border-radius: 10px 10px 40px 10px;
+            box-shadow: inset 3px 3px 5px rgba(255,255,255,0.4), inset -3px -3px 5px rgba(0,0,0,0.1), 0 0 20px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column; align-items: center;
+            padding-top: 25px;
+            transform-origin: center center;
+            will-change: transform;
+        }
+
+        .top-grooves {
+            position: absolute; top: 10px; width: 90%; height: 5px;
+            border-top: 2px solid rgba(0,0,0,0.05); border-bottom: 2px solid rgba(0,0,0,0.05); left: 5%;
+        }
+
+        .screen-lens {
+            width: 280px; height: 220px; /* 稍微加高以容纳你的 200x150 画面 */
+            background-color: var(--gb-screen-lens);
+            border-radius: 10px 10px 30px 10px;
+            position: relative;
+            display: flex; justify-content: center;
+            padding-top: 25px;
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.3);
+        }
+
+        .lens-strip {
+            position: absolute; top: 10px; width: 90%; display: flex; justify-content: space-between; align-items: center;
+            color: #7d8087; font-size: 8px; font-weight: bold;
+            border-top: 1px solid #7d8087; border-bottom: 1px solid #7d8087; padding: 1px 0;
+        }
+
+        .battery-led {
+            position: absolute; top: 65px; left: 10px; width: 8px; height: 8px;
+            background-color: #f00; border-radius: 50%; box-shadow: 0 0 5px #f00;
+        }
+        .battery-text {
+            position: absolute; top: 78px; left: 3px; font-size: 8px; color: #999;
+        }
+
+        /* * 核心显示区域：调整为适应你的游戏尺寸 (200x150)
+         */
+        .game-display {
+            width: 200px;
+            height: 150px;
+            background-color: var(--gb-screen-bg);
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.6);
+            image-rendering: pixelated; 
+            image-rendering: crisp-edges;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .brand-logo {
+            margin-top: 10px; margin-left: -120px; color: #303285; font-weight: 900; font-style: italic; font-size: 18px; letter-spacing: 1px; text-shadow: 1px 1px 0px rgba(255,255,255,0.5);
+        }
+        .brand-logo span { font-weight: normal; font-size: 14px; color: #303285; }
+
+        .controls-area { width: 100%; height: 240px; position: relative; }
+        .btn-active { transform: translate(1px, 1px) !important; box-shadow: inset 1px 1px 3px rgba(0,0,0,0.5) !important; }
+
+        .d-pad { position: absolute; top: 40px; left: 30px; width: 90px; height: 90px; }
+        .cross-h, .cross-v { background-color: var(--gb-btn-dark); position: absolute; border-radius: 3px; box-shadow: 2px 2px 0px rgba(0,0,0,0.2), inset 1px 1px 2px rgba(255,255,255,0.2); }
+        .cross-h { top: 30px; left: 0; width: 90px; height: 30px; }
+        .cross-v { top: 0; left: 30px; width: 30px; height: 90px; }
+        .cross-center { position: absolute; top: 35px; left: 35px; width: 20px; height: 20px; background: radial-gradient(circle, #222 20%, transparent 30%); z-index: 2; }
+
+        .zone { position: absolute; z-index: 10; }
+        .zone-up    { top: 0; left: 30px; width: 30px; height: 40px; }
+        .zone-down  { bottom: 0; left: 30px; width: 30px; height: 40px; }
+        .zone-left  { top: 30px; left: 0; width: 40px; height: 30px; }
+        .zone-right { top: 30px; right: 0; width: 40px; height: 30px; }
+
+        .action-btns { position: absolute; top: 50px; right: 20px; width: 110px; height: 60px; transform: rotate(-25deg); }
+        .ab-btn { width: 36px; height: 36px; background-color: var(--gb-btn-red); border-radius: 50%; position: absolute; box-shadow: 2px 2px 3px rgba(0,0,0,0.3), inset -1px -1px 3px rgba(0,0,0,0.2); }
+        .ab-btn::after { content: attr(data-label); position: absolute; bottom: -18px; right: 8px; font-size: 12px; color: #303285; font-weight: bold; font-family: sans-serif; transform: rotate(25deg); }
+        .btn-a { right: 0; top: 5px; }
+        .btn-b { left: 10px; bottom: 5px; }
+
+        .option-btns { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; gap: 15px; }
+        .pill-btn-wrapper { display: flex; flex-direction: column; align-items: center; }
+        .pill-btn { width: 50px; height: 12px; background-color: #999; border-radius: 10px; transform: rotate(-25deg); box-shadow: 1px 1px 2px rgba(0,0,0,0.3); margin-bottom: 5px; border: 1px solid rgba(0,0,0,0.1); }
+        .pill-label { font-size: 8px; color: #303285; font-weight: bold; font-family: sans-serif; letter-spacing: 0.5px; margin-top: 5px; }
+
+        .speaker { position: absolute; bottom: 25px; right: 20px; transform: rotate(-25deg); }
+        .speaker-slot { width: 60px; height: 6px; background-color: rgba(0,0,0,0.1); margin-bottom: 4px; border-radius: 3px; box-shadow: inset 1px 1px 1px rgba(0,0,0,0.2); }
+
+        /* =========================================
+           2. 你的游戏特定样式 (移植自小游戏.txt)
+           ========================================= */
+        canvas {
+            display: block; /* 移除默认内边距 */
+            width: 100%;    /* 填满容器 */
+            height: 100%;
+        }
+
+        .ui-layer {
+            position: absolute;
+            top: 5px; left: 5px; /* 调整位置以适应小屏幕 */
+            pointer-events: none;
+            display: flex; flex-direction: column; gap: 2px;
+        }
+        .tag {
+            background: rgba(0,0,0,0.8); padding: 2px 4px; border-radius: 2px;
+            color: #fff; font-size: 10px; border-left: 2px solid #FFD54F; /* 字体改小一点 */
+            text-shadow: 1px 1px 0 #000;
+            font-weight: normal; 
+            font-family: 'Courier New', monospace;
+        }
+        #click-to-start {
+            position: absolute; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.85); color:#fff; display: flex;
+            justify-content: center; align-items: center; 
+            font-size: 14px; /* 字体改小 */
+            text-align: center;
+            z-index: 99; cursor: pointer;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="gameboy-container">
+        <div class="top-grooves"></div>
+
+        <div class="screen-lens">
+            <div class="lens-strip">
+                <span> </span>
+            </div>
+            
+            <div class="battery-led"></div>
+            <div class="battery-text">BATTERY</div>
+
+            <div class="game-display" id="game-display">
+                <canvas id="gameCanvas" width="200" height="150"></canvas>
+                <div class="ui-layer">
+                    <div class="tag" id="ui-cards">Cards: 0/3</div>
+                    <div class="tag" id="ui-state">Tasks: 0/6</div>
+                </div>
+                <div id="click-to-start">点击屏幕<br>开启游戏</div>
+            </div>
+        </div>
+
+        <div class="brand-logo">Spoon Gelato</span>&trade;</div>
+
+        <div class="controls-area">
+            <div class="d-pad">
+                <div class="cross-v"></div>
+                <div class="cross-h"></div>
+                <div class="cross-center"></div>
+                <div class="zone zone-up"    data-key="ArrowUp"></div>
+                <div class="zone zone-down"  data-key="ArrowDown"></div>
+                <div class="zone zone-left"  data-key="ArrowLeft"></div>
+                <div class="zone zone-right" data-key="ArrowRight"></div>
+            </div>
+
+            <div class="action-btns">
+                <div class="ab-btn btn-b" data-label="B" data-key="z"></div>
+                <div class="ab-btn btn-a" data-label="A" data-key=" "></div> 
+            </div>
+
+            <div class="option-btns">
+                <div class="pill-btn-wrapper">
+                    <div class="pill-btn" data-key="Shift"></div> <span class="pill-label">SELECT</span>
+                </div>
+                <div class="pill-btn-wrapper">
+                    <div class="pill-btn" data-key="Enter"></div> <span class="pill-label">START</span>
+                </div>
+            </div>
+
+            <div class="speaker">
+                <div class="speaker-slot"></div><div class="speaker-slot"></div><div class="speaker-slot"></div>
+                <div class="speaker-slot"></div><div class="speaker-slot"></div><div class="speaker-slot"></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    /* =========================================
+       1. 你的游戏逻辑 (已移植并修改按键监听)
+       ========================================= */
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    const startOverlay = document.getElementById('click-to-start');
+
+    // --- 0. 音频系统 ---
+    let audioCtx = null;
+    let audioStarted = false;
+    let musicInterval = null;
+
+    function initAudio() {
+        if (audioStarted) return;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        audioStarted = true;
+        startOverlay.style.display = 'none';
+        // 开启电源灯
+        document.querySelector('.battery-led').style.boxShadow = "0 0 5px #4AFD03";
+        document.querySelector('.battery-led').style.backgroundColor = "#4AFD03";
+    }
+
+    function playTone(freq, duration, type='square', vol=0.1) {
+        if (!audioCtx) return;
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.type = type;
+        oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + duration);
+    }
+
+    function playJingle() {
+        playTone(880, 0.1); setTimeout(() => playTone(1760, 0.2), 100);
+    }
+
+    function playShutterSound() {
+        if (!audioCtx) return;
+        const bufferSize = audioCtx.sampleRate * 0.1; 
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        noise.connect(gain);
+        gain.connect(audioCtx.destination);
+        noise.start();
+    }
+
+    function startBirthdayLoop() {
+        if (musicInterval) return;
+        const notes = [
+            {f:261, d:0.2}, {f:261, d:0.2}, {f:293, d:0.4}, {f:261, d:0.4}, {f:349, d:0.4}, {f:329, d:0.8},
+            {f:261, d:0.2}, {f:261, d:0.2}, {f:293, d:0.4}, {f:261, d:0.4}, {f:392, d:0.4}, {f:349, d:0.8},
+            {f:261, d:0.2}, {f:261, d:0.2}, {f:523, d:0.4}, {f:440, d:0.4}, {f:349, d:0.4}, {f:329, d:0.4}, {f:293, d:0.4},
+            {f:466, d:0.2}, {f:466, d:0.2}, {f:440, d:0.4}, {f:349, d:0.4}, {f:392, d:0.4}, {f:349, d:0.8} 
+        ];
+        let totalDuration = 0;
+        notes.forEach(n => totalDuration += n.d + 0.05);
+        
+        const playMelody = () => {
+            let time = 0;
+            notes.forEach(n => {
+                setTimeout(() => {
+                    if(GAME.mode === 'ENDING' || GAME.mode === 'PHOTO_OP' || GAME.mode === 'FINAL_SHOWCASE') {
+                        playTone(n.f, n.d, 'triangle', 0.1);
+                    }
+                }, time * 1000);
+                time += n.d + 0.05;
+            });
+        };
+        playMelody();
+        musicInterval = setInterval(playMelody, totalDuration * 1000);
+    }
+
+    // 触摸点击遮罩初始化音频
+    startOverlay.addEventListener('click', initAudio);
+    startOverlay.addEventListener('touchstart', (e) => { e.preventDefault(); initAudio(); });
+
+    // --- 1. 资源与配置 ---
+    const P = {
+        wall:'#F5E6CA', floor:'#E1C7A8', skirt:'#8D6E63', wood:'#8E4B26',
+        glass:'rgba(225, 245, 254, 0.5)', snow:'#FFFFFF', outside:'#03162B',
+        steel:'#78909C', steelHi:'#CFD8DC',
+        black:'#44413B', gray:'#A7A5A3', white:'#EDE0CA', pink:'#EDCAD1', brown:'#795548',
+        skin:'#FFCCBC', hairDk:'#3E2723', hairLt:'#FFAB91',
+        uiBg: '#3E2723', uiBorder: '#D7BFA6', uiText: '#FFFFFF',
+        card: '#FFCDD2', cakeBase: '#FFECB3', cakeIce: '#F8BBD0', flame: '#FF9800',
+        ltBlue: '#81D4FA'
+    };
+
+    // Sprites (保留原代码)
+    const SPRITE_PLAYER_STAND = [[0,0,0,0,0,4,4,4,4,4,4,0,0,0,0,0],[0,0,0,0,4,4,4,4,4,4,4,4,0,0,0,0],[0,0,0,0,4,4,4,4,4,4,4,4,0,0,0,0],[0,0,0,0,1,1,2,2,2,2,1,1,0,0,0,0],[0,0,0,0,1,2,2,2,2,2,2,1,0,0,0,0],[0,0,0,0,0,2,2,2,2,2,2,0,0,0,0,0],[0,0,0,0,0,3,3,3,3,3,3,0,0,0,0,0],[0,0,0,0,1,3,3,3,3,3,3,1,0,0,0,0],[0,0,0,1,3,3,3,3,3,3,3,3,1,0,0,0],[0,0,0,1,3,3,3,3,3,3,3,3,1,0,0,0],[0,0,0,1,3,3,3,3,3,3,3,3,1,0,0,0],[0,0,0,0,1,3,3,3,3,3,3,1,0,0,0,0],[0,0,0,0,1,5,5,1,1,5,5,1,0,0,0,0],[0,0,0,0,1,5,5,1,1,5,5,1,0,0,0,0],[0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]];
+    const SPRITE_PLAYER_WALK1 = [[0,0,0,0,0,4,4,4,4,4,4,0,0,0,0,0],[0,0,0,0,4,4,4,4,4,4,4,4,0,0,0,0],[0,0,0,0,4,4,4,4,4,4,4,4,0,0,0,0],[0,0,0,0,1,1,2,2,2,2,1,1,0,0,0,0],[0,0,0,0,1,2,2,2,2,2,2,1,0,0,0,0],[0,0,0,0,0,2,2,2,2,2,2,0,0,0,0,0],[0,0,0,0,0,3,3,3,3,3,3,0,0,0,0,0],[0,0,0,0,1,3,3,3,3,3,3,1,0,0,0,0],[0,0,0,1,3,3,3,3,3,3,3,3,1,0,0,0],[0,0,0,1,3,3,3,3,3,3,3,3,1,0,0,0],[0,0,0,1,3,3,3,3,3,3,3,3,1,0,0,0],[0,0,0,0,1,3,3,3,3,3,3,1,0,0,0,0],[0,0,0,0,1,5,5,1,1,5,5,1,0,0,0,0],[0,0,0,0,0,5,5,1,1,5,5,0,0,0,0,0],[0,0,0,0,1,1,1,0,0,1,1,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]];
+    const SPRITE_PLAYER_WALK2 = [[0,0,0,0,0,4,4,4,4,4,4,0,0,0,0,0],[0,0,0,0,4,4,4,4,4,4,4,4,0,0,0,0],[0,0,0,0,4,4,4,4,4,4,4,4,0,0,0,0],[0,0,0,0,1,1,2,2,2,2,1,1,0,0,0,0],[0,0,0,0,1,2,2,2,2,2,2,1,0,0,0,0],[0,0,0,0,0,2,2,2,2,2,2,0,0,0,0,0],[0,0,0,0,0,3,3,3,3,3,3,0,0,0,0,0],[0,0,0,0,1,3,3,3,3,3,3,1,0,0,0,0],[0,0,0,1,3,3,3,3,3,3,3,3,1,0,0,0],[0,0,0,1,3,3,3,3,3,3,3,3,1,0,0,0],[0,0,0,1,3,3,3,3,3,3,3,3,1,0,0,0],[0,0,0,0,1,3,3,3,3,3,3,1,0,0,0,0],[0,0,0,0,1,5,5,1,1,5,5,1,0,0,0,0],[0,0,0,0,1,5,5,1,1,5,5,1,0,0,0,0],[0,0,0,0,0,1,1,0,0,1,1,1,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]];
+
+    const SPRITE_FEMALE_STAND = [[0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,1,2,2,2,2,2,2,1,0,0,0,0,0],[0,0,0,1,2,2,2,2,2,2,1,0,0,0,0,0],[0,0,0,0,2,2,2,2,2,2,0,0,0,0,0,0],[0,0,0,0,1,3,3,3,3,1,0,0,0,0,0,0],[0,0,0,0,3,3,3,3,3,3,0,0,0,0,0,0],[0,0,0,1,3,3,3,3,3,3,1,0,0,0,0,0],[0,0,0,1,3,3,3,3,3,3,1,0,0,0,0,0],[0,0,0,1,3,3,3,3,3,3,1,0,0,0,0,0],[0,0,0,0,4,4,4,4,4,4,0,0,0,0,0,0],[0,0,0,0,4,4,1,1,4,4,0,0,0,0,0,0],[0,0,0,0,4,4,1,1,4,4,0,0,0,0,0,0],[0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]];
+    const SPRITE_FEMALE_WALK1 = [[0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,1,2,2,2,2,2,2,1,0,0,0,0,0],[0,0,0,1,2,2,2,2,2,2,1,0,0,0,0,0],[0,0,0,0,2,2,2,2,2,2,0,0,0,0,0,0],[0,0,0,0,1,3,3,3,3,1,0,0,0,0,0,0],[0,0,0,0,3,3,3,3,3,3,0,0,0,0,0,0],[0,0,0,1,3,3,3,3,3,3,1,0,0,0,0,0],[0,0,0,1,3,3,3,3,3,3,1,0,0,0,0,0],[0,0,0,1,3,3,3,3,3,3,1,0,0,0,0,0],[0,0,0,0,4,4,4,4,4,4,0,0,0,0,0,0],[0,0,0,0,4,4,1,1,4,4,0,0,0,0,0,0],[0,0,0,0,0,4,4,1,1,4,4,0,0,0,0,0],[0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]];
+    const SPRITE_FEMALE_WALK2 = [[0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,1,2,2,2,2,2,2,1,0,0,0,0,0],[0,0,0,1,2,2,2,2,2,2,1,0,0,0,0,0],[0,0,0,0,2,2,2,2,2,2,0,0,0,0,0,0],[0,0,0,0,1,3,3,3,3,1,0,0,0,0,0,0],[0,0,0,0,3,3,3,3,3,3,0,0,0,0,0,0],[0,0,0,1,3,3,3,3,3,3,1,0,0,0,0,0],[0,0,0,1,3,3,3,3,3,3,1,0,0,0,0,0],[0,0,0,1,3,3,3,3,3,3,1,0,0,0,0,0],[0,0,0,0,4,4,4,4,4,4,0,0,0,0,0,0],[0,0,0,0,4,4,1,1,4,4,0,0,0,0,0,0],[0,0,0,0,4,4,1,1,4,4,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]];
+
+    const SPRITE_FEMALE_SIT = [[0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0],[0,0,0,1,2,2,2,2,2,2,1,0,0,0,0,0],[0,0,0,1,2,2,2,2,2,2,1,0,0,0,0,0],[0,0,0,0,1,3,3,3,3,1,0,0,0,0,0,0],[0,0,0,0,3,3,3,3,3,3,0,0,0,0,0,0],[0,0,0,0,3,3,3,3,3,3,0,0,0,0,0,0],[0,0,0,1,3,3,3,3,3,3,1,0,0,0,0,0],[0,0,0,1,4,4,4,4,4,4,1,0,0,0,0,0],[0,0,0,0,4,4,4,4,4,4,0,0,0,0,0,0],[0,0,0,0,4,4,0,0,4,4,0,0,0,0,0,0],[0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]];
+    const SPRITE_CAKE = [[0,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0], [0,0,2,2,2,2,0,0], [0,1,1,1,1,1,1,0], [0,1,1,1,1,1,1,0], [1,1,1,1,1,1,1,1], [1,1,1,1,1,1,1,1], [0,0,0,0,0,0,0,0]];
+
+    // --- 2. 游戏核心状态 ---
+    let GAME = {};
+    let SCENE = {};
+    let player = {};
+    let snowflakes = [];
+
+function initGame() {
+    GAME = {
+        mode: 'PLAYING', 
+        stats: {
+            cards: 0,
+            talkedNpcs: new Set(),
+            miniGameWon: false,
+            hiddenSecretRead: false,
+            allTasksDone: false 
+        },
+        chase: { active: false, timer: 0 }, 
+        dialog: { text: "", displayBuffer: "", charIndex: 0, timer: 0, targetName: "" },
+        miniGame: { pos: 0, dir: 1, speed: 2.5, targetZone: { start: 42, end: 58 }, result: null, cooldown: 0 },
+        vfx: [],
+        partyState: { gfStage: 0, melodyPlayed: false },
+        photoOp: { timer: 0, phase: 'idle' },
+        toast: { text: "", timer: 0 }
+    };
+
+    SCENE = {
+        window: { x: 50, y: 5, w: 100, h: 20 },
+        furniture: [
+            { type: 'wall', x: 0, y: 0, w: 200, h: 30 },
+            { type: 'wall', x: 0, y: 100, w: 10, h: 50 },
+            { type: 'wall', x: 0, y: 30, w: 10, h: 30 },
+            { type: 'bench_v', x: 180, y: 60, w: 12, h: 45 },
+            { type: 'stool', x: 60, y: 35, w: 10, h: 10 },
+            { type: 'stool', x: 100, y: 35, w: 10, h: 10 },
+            { type: 'stool', x: 140, y: 35, w: 10, h: 10 },
+            { type: 'counter', x: 50, y: 110, w: 100, h: 20 }
+        ], 
+        cards: [
+            { x: 165, y: 70, collected: false }, 
+            { x: 45, y: 125, collected: false }, 
+            { x: 5, y: 65, collected: false }    
+        ],
+        npcs: [
+            { id: 'staff1', name: 'KDAE', x: 60, y: 130, sprite: SPRITE_FEMALE_STAND, colors: {1:P.hairDk, 2:P.skin, 3:P.ltBlue, 4:P.black}, msg: "生日快乐，帅是一种感觉！", targetPos: {x:70, y:80} },
+            { id: 'staff2', name: '布河', x: 120, y: 130, sprite: SPRITE_FEMALE_STAND, colors: {1:P.hairDk, 2:P.skin, 3:P.gray, 4:P.black}, msg: "生日快乐，送你一坨粑粑冰淇淋。", targetPos: {x:130, y:80} },
+            { id: 'staff3', name: 'SHERBET LEMON', x: 97, y: 90, sprite: SPRITE_FEMALE_SIT, colors: {1:P.black, 2:P.skin, 3:P.pink, 4:P.white}, msg: "生日快乐!成为健康的冰淇淋大师吧！", targetPos: {x:90, y:73} },
+            
+            // === 汤汤：坐标 x:160, y:75 (避开障碍物) ===
+            { 
+                id: 'gf', name: '汤汤', x: 160, y: 75, sprite: SPRITE_FEMALE_SIT, colors: {1:P.hairDk, 2:P.skin, 3:'#3D3C37', 4:'#232220'}, 
+                msg: "", targetPos: {x:100, y:85}, hasCake: false, animTimer: 0,
+                dialogList: ["（戳）", "祝你—生日——快乐—", "（不贴）（戳）", "宇宙流星强力戳戳拳（请绕场一周）"],
+                dialogIdx: 0,
+                wander: { timer: 0, dx: 0, dy: 0 } // 必须要有这个属性
+            },
+            // === BOO：坐标 x:137, y:50 (避开墙壁) ===
+            { 
+                id: 'cust', name: 'BOO', x: 137, y: 50, sprite: SPRITE_FEMALE_SIT, colors: {1:P.black, 2:P.skin, 3:'#552961', 4:'#333'}, 
+                msg: "剑玉大师生日快乐。", msgWin: "少练点剑吧！", targetPos: {x:115, y:65},
+                wander: { timer: 0, dx: 0, dy: 0 } // 必须要有这个属性
+            }
+        ],
+        cakeObj: null 
+    };
+
+    player = { 
+        x: 10, y: 80, w: 14, h: 14, speed: 1.2, 
+        colors: {1:'#3E2723', 2:P.skin, 3:'#FFF3E0', 4:'#D84315', 5:'#4E342E'},
+        animTimer: 0,
+        jumpY: 0, vy: 0 
+    };
+    
+    snowflakes = Array.from({length:40}, () => ({ 
+        x: Math.random()*SCENE.window.w + SCENE.window.x, 
+        y: Math.random()*SCENE.window.h + SCENE.window.y, 
+        speed: Math.random()*0.5+0.1 
+    }));
+    
+    updateUI();
+}
+    const keys = { w:false, a:false, s:false, d:false };
+
+    // --- 4. 逻辑控制 ---
+    function spawnVFX(type, x, y) {
+        GAME.vfx.push({ type, x, y, life: 60, offset: 0 });
+    }
+
+    function checkEndgameCondition() {
+        if (GAME.stats.cards === 3 && GAME.stats.talkedNpcs.size === 5 && GAME.stats.hiddenSecretRead) {
+            GAME.stats.allTasksDone = true;
+        }
+        updateUI();
+    }
+
+     function startDialog(npc) {
+    if (npc.id === 'gf' && GAME.stats.allTasksDone) {
+        GAME.mode = 'PARTY_SEQUENCE';
+        SCENE.npcs.forEach(n => { if(n.sprite === SPRITE_FEMALE_SIT) n.sprite = SPRITE_FEMALE_STAND; });
+        return;
+    }
+
+    GAME.mode = 'DIALOG';
+    GAME.dialog.targetName = npc.name;
+    GAME.dialog.charIndex = 0; GAME.dialog.displayBuffer = ""; GAME.dialog.timer = 0;
+    
+    // === 逻辑：汤汤多段对话 ===
+    if (npc.id === 'gf' && npc.dialogList) {
+        if (npc.dialogIdx >= npc.dialogList.length) npc.dialogIdx = 0;
+        GAME.dialog.text = npc.dialogList[npc.dialogIdx];
+        // 注意：这里删除了 GAME.stats.talkedNpcs.add('gf')，
+        // 这样只要对话没进行到最后一句，感叹号就会一直存在。
+    } 
+    else if(npc.id === 'cust' && GAME.stats.miniGameWon) {
+        GAME.dialog.text = npc.msgWin;
+        GAME.stats.hiddenSecretRead = true;
+        GAME.stats.talkedNpcs.add(npc.id); // 其他人正常消除感叹号
+        checkEndgameCondition();
+    } else {
+        GAME.dialog.text = npc.msg;
+        GAME.stats.talkedNpcs.add(npc.id); // 其他人正常消除感叹号
+    }
+    checkEndgameCondition();
+}
+    function startMiniGame() {
+        GAME.mode = 'MINIGAME';
+        GAME.miniGame.pos = 0; 
+        GAME.miniGame.dir = 1; 
+        GAME.miniGame.result = null;
+        GAME.miniGame.cooldown = 30; 
+    }
+
+    function updateUI() {
+        document.getElementById('ui-cards').innerText = `Cards: ${GAME.stats.cards}/3`;
+        let tasks = GAME.stats.cards + GAME.stats.talkedNpcs.size + (GAME.stats.hiddenSecretRead?1:0);
+        document.getElementById('ui-state').innerText = `Tasks: ${tasks}/9`;
+    }
+
+    function checkCollision(x, y) {
+        const pRect = { x: x+2, y: y+8, w: 10, h: 8 };
+        for(let obj of SCENE.furniture) if(pRect.x < obj.x + obj.w && pRect.x + pRect.w > obj.x && pRect.y < obj.y + obj.h && pRect.y + pRect.h > obj.y) return true;
+        if(GAME.mode !== 'PARTY_SEQUENCE' && GAME.mode !== 'ENDING' && GAME.mode !== 'FINAL_SHOWCASE') {
+            for(let npc of SCENE.npcs) if(pRect.x < npc.x + 12 && pRect.x + pRect.w > npc.x + 4 && pRect.y < npc.y + 16 && pRect.y + pRect.h > npc.y + 8) return true;
+        }
+        if (x < 0) return true;
+        if (x > 200-14 || y < 30 || y > 150-14) return true;
+        return false;
+    }
+
+    function checkCollection() {
+        const pCenter = { x: player.x + 7, y: player.y + 7 };
+        SCENE.cards.forEach(card => {
+            if(!card.collected) {
+                const dx = pCenter.x - (card.x + 2); const dy = pCenter.y - (card.y + 2);
+                if(Math.sqrt(dx*dx + dy*dy) < 10) {
+                    card.collected = true;
+                    GAME.stats.cards++;
+                    spawnVFX('envelope', player.x+4, player.y-10);
+                    playJingle();
+                    checkEndgameCondition();
+                }
+            }
+        });
+    }
+
+       function handleInteraction() {
+    if (!audioStarted) return;
+
+    // 1. 结局相册逻辑
+    if (GAME.mode === 'FINAL_SHOWCASE') { initGame(); return; }
+
+    // 2. 拍照逻辑
+    if (GAME.mode === 'ENDING') {
+        playShutterSound();
+        GAME.mode = 'PHOTO_OP';
+        GAME.photoOp.timer = 0;
+        GAME.photoOp.phase = 'flash';
+        return;
+    }
+
+    // 3. 对话进行中逻辑
+    if(GAME.mode === 'DIALOG') {
+        // 如果字没打完，点击则瞬间显示全
+        if(GAME.dialog.displayBuffer.length < GAME.dialog.text.length) {
+            GAME.dialog.displayBuffer = GAME.dialog.text;
+            GAME.dialog.charIndex = GAME.dialog.text.length;
+        } else {
+            // === 对话框关闭（对话结束）时的逻辑 ===
+            const npc = SCENE.npcs.find(n => n.name === GAME.dialog.targetName);
+            
+            if (npc && npc.id === 'gf') {
+                // --- 汤汤的特殊逻辑 ---
+                
+                // 第1句结束后：主角跳跃
+                if (npc.dialogIdx === 0) {
+                    player.vy = -3.0; // 向上跳跃力度
+                }
+                if (npc.dialogIdx === 2) {
+                    player.vy = -3.0; // 向上跳跃力度
+                }
+
+                
+                // 第4句结束后：完成对话，消除感叹号，开始追逐
+                if (npc.dialogIdx === 3) {
+                    // 开启追逐
+                    GAME.chase.active = true;
+                    GAME.chase.timer = 600; // 追逐持续约 10秒
+                    npc.sprite = SPRITE_FEMALE_STAND; // 确保她是站立贴图
+                    
+                    // 【关键点】在这里才标记为“已对话”，消除感叹号
+                    GAME.stats.talkedNpcs.add('gf'); 
+                    checkEndgameCondition();
+                }
+
+                // 准备下一句（为了防止数组越界，这里做一个小限制）
+                npc.dialogIdx++;
+                // 如果聊完了4句，下次对话重置回第1句（可选，视您需求而定）
+                if (npc.dialogIdx >= npc.dialogList.length) {
+                   // npc.dialogIdx = 0; // 如果您希望她永远循环说这4句，取消此行注释
+                }
+            }
+
+            // 恢复游戏控制权
+            GAME.mode = 'PLAYING';
+            
+            // 如果是剑玉大师 BOO 且没赢过小游戏，触发小游戏
+            if(npc && npc.id === 'cust' && !GAME.stats.miniGameWon) startMiniGame();
+        }
+        return;
+    }
+
+    // 4. 小游戏逻辑
+    if(GAME.mode === 'MINIGAME') {
+        if(GAME.miniGame.result) { GAME.mode = 'PLAYING'; return; }
+        if(GAME.miniGame.cooldown > 0) return;
+        const p = GAME.miniGame.pos; const z = GAME.miniGame.targetZone;
+        if(p >= z.start && p <= z.end) {
+            GAME.miniGame.result = 'SUCCESS'; GAME.stats.miniGameWon = true;
+            spawnVFX('note', player.x+4, player.y-10); playJingle();
+        } else { GAME.miniGame.result = 'FAIL'; }
+        return;
+    }
+
+    // 5. 寻找最近的NPC触发对话
+    const pCenter = { x: player.x + 7, y: player.y + 7 };
+    let nearestDist = 20; let targetNPC = null;
+    SCENE.npcs.forEach(npc => {
+        const nCenter = { x: npc.x + 8, y: npc.y + 8 };
+        const d = Math.sqrt((pCenter.x-nCenter.x)**2 + (pCenter.y-nCenter.y)**2);
+        if(d < nearestDist) { nearestDist = d; targetNPC = npc; }
+    });
+    if(targetNPC) startDialog(targetNPC);
+}
+
+      function update() {
+    // 1. 环境更新
+    snowflakes.forEach(p => { p.y += p.speed; if(p.y > SCENE.window.y + SCENE.window.h) { p.y = SCENE.window.y; p.x = Math.random()*SCENE.window.w + SCENE.window.x; } });
+    GAME.vfx.forEach(v => { v.life--; v.offset -= 0.2; });
+    GAME.vfx = GAME.vfx.filter(v => v.life > 0);
+    if (GAME.toast.timer > 0) GAME.toast.timer--;
+
+    // ================== PLAYING 模式 ==================
+    if (GAME.mode === 'PLAYING') {
+        let dx = 0, dy = 0;
+        if(keys.w) dy -= player.speed; if(keys.s) dy += player.speed; if(keys.a) dx -= player.speed; if(keys.d) dx += player.speed;
+        
+        if (keys.a && player.x < 5 && player.y > 60 && player.y < 100) {
+            GAME.toast.text = "外面正在下雪呢..."; GAME.toast.timer = 60; 
+        }
+
+        // --- 主角物理 (跳跃) ---
+        if (player.vy !== 0 || player.jumpY !== 0) {
+            player.jumpY += player.vy; 
+            player.vy += 0.3; 
+            if (player.jumpY >= 0) { player.jumpY = 0; player.vy = 0; }
+        }
+
+        // --- 主角移动 (主角依然需要严谨的碰撞检测) ---
+        if(dx !== 0 || dy !== 0) {
+            player.animTimer++;
+            if(!checkCollision(player.x+dx, player.y)) player.x += dx;
+            if(!checkCollision(player.x, player.y+dy)) player.y += dy;
+            checkCollection();
+        } else {
+            player.animTimer = 0;
+        }
+
+        // ================== NPC AI 逻辑 (修复版) ==================
+        SCENE.npcs.forEach(npc => {
+            let moved = false;
+            let moveX = 0, moveY = 0;
+            let isChasing = false;
+
+            // 1. 计算移动意图
+            if (npc.id === 'gf' && GAME.chase.active && GAME.chase.timer > 0) {
+                // --- 追逐模式 ---
+                isChasing = true;
+                GAME.chase.timer--;
+                const speed = 1.1; 
+                const distX = player.x - npc.x;
+                const distY = player.y - npc.y;
+                const dist = Math.sqrt(distX*distX + distY*distY);
+                
+                if (dist > 18) { 
+                    moveX = (distX / dist) * speed;
+                    moveY = (distY / dist) * speed;
+                }
+                
+                if (GAME.chase.timer <= 0) {
+                    GAME.chase.active = false;
+                    npc.sprite = SPRITE_FEMALE_SIT;
+                } else {
+                    npc.sprite = SPRITE_FEMALE_STAND;
+                }
+            }
+            else if (npc.wander) {
+                // --- 随机游荡模式 ---
+                npc.wander.timer--;
+                if (npc.wander.timer <= 0) {
+                    npc.wander.timer = Math.floor(Math.random() * 90) + 60;
+                    if (Math.random() < 0.6) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const wSpeed = 0.5;
+                        npc.wander.dx = Math.cos(angle) * wSpeed;
+                        npc.wander.dy = Math.sin(angle) * wSpeed;
+                    } else {
+                        npc.wander.dx = 0; npc.wander.dy = 0;
+                    }
+                }
+                moveX = npc.wander.dx;
+                moveY = npc.wander.dy;
+            }
+
+            // 2. 执行移动 (使用“安全区域”判断，而不是碰撞检测)
+            if (moveX !== 0 || moveY !== 0) {
+                let nextX = npc.x + moveX;
+                let nextY = npc.y + moveY;
+
+                // 【关键修复】只要在房间的安全范围内，就允许移动，无视家具碰撞
+                // 房间范围大约是：X(10~190), Y(35~100)
+                if (nextX > 10 && nextX < 190 && nextY > 35 && nextY < 100) {
+                    npc.x = nextX;
+                    npc.y = nextY;
+                    moved = true;
+                    // 如果在游荡且移动中，确保是站立姿态
+                    if (!isChasing && npc.sprite === SPRITE_FEMALE_SIT) {
+                        npc.sprite = SPRITE_FEMALE_STAND;
+                    }
+                } else {
+                    // 撞到房间边界了，如果是游荡，就反弹一下
+                    if (npc.wander) {
+                        npc.wander.dx *= -1;
+                        npc.wander.dy *= -1;
+                    }
+                }
+            }
+
+            // 3. 动画状态
+            if (moved) {
+                npc.animTimer++;
+            } else {
+                npc.animTimer = 0;
+                // 没在动的时候，如果不处于追逐状态，可以变回坐下（显得可爱）
+                if (!isChasing && !moved && (npc.id === 'gf' || npc.id === 'cust')) {
+                     npc.sprite = SPRITE_FEMALE_SIT;
+                }
+            }
+        });
+    } 
+    // ================== 其他模式逻辑 ==================
+    else if (GAME.mode === 'DIALOG') {
+        if(GAME.dialog.charIndex < GAME.dialog.text.length) {
+            GAME.dialog.timer++;
+            if(GAME.dialog.timer > 3) { GAME.dialog.displayBuffer += GAME.dialog.text[GAME.dialog.charIndex]; GAME.dialog.charIndex++; GAME.dialog.timer = 0; }
+        }
+    }
+    else if (GAME.mode === 'MINIGAME') {
+        if(GAME.miniGame.cooldown > 0) GAME.miniGame.cooldown--;
+        if(!GAME.miniGame.result) {
+            GAME.miniGame.pos += GAME.miniGame.speed * GAME.miniGame.dir;
+            if(GAME.miniGame.pos >= 100 || GAME.miniGame.pos <= 0) GAME.miniGame.dir *= -1;
+        }
+    }
+    else if (GAME.mode === 'PARTY_SEQUENCE') {
+        const gf = SCENE.npcs.find(n=>n.id==='gf');
+        if(!gf) return;
+        let currentSpeed = 0.8; 
+        let gfMoving = false;
+
+        if (GAME.partyState.gfStage === 0) {
+            if (gf.x > 5) { gf.x -= currentSpeed; gfMoving=true; }
+            if (gf.y > 80) { gf.y -= currentSpeed; gfMoving=true; } else if (gf.y < 80) { gf.y += currentSpeed; gfMoving=true; }
+            if (gf.x <= 5 && Math.abs(gf.y - 80) < 2) GAME.partyState.gfStage = 1;
+        } else if (GAME.partyState.gfStage === 1) {
+            gf.hasCake = true; GAME.partyState.gfStage = 2;
+        } else if (GAME.partyState.gfStage === 2) {
+            currentSpeed = 0.4;
+            const tx = gf.targetPos.x, ty = gf.targetPos.y;
+            if (Math.abs(gf.x - tx) > 1) { gf.x += (tx > gf.x ? currentSpeed : -currentSpeed); gfMoving=true; }
+            if (Math.abs(gf.y - ty) > 1) { gf.y += (ty > gf.y ? currentSpeed : -currentSpeed); gfMoving=true; }
+            if (Math.abs(gf.x - tx) < 2 && Math.abs(gf.y - ty) < 2) GAME.partyState.gfStage = 3;
+        }
+        
+        if(gfMoving) gf.animTimer += (currentSpeed > 0.5 ? 1 : 0.5); else gf.animTimer = 0;
+
+        let allArrived = true;
+        SCENE.npcs.forEach(npc => {
+            if (npc.id === 'gf') return;
+            const tx = npc.targetPos.x, ty = npc.targetPos.y;
+            const otherSpeed = 0.8;
+            if (Math.abs(npc.x - tx) > 1) { npc.x += (tx > npc.x ? otherSpeed : -otherSpeed); allArrived = false; }
+            if (Math.abs(npc.y - ty) > 1) { npc.y += (ty > npc.y ? otherSpeed : -otherSpeed); allArrived = false; }
+        });
+
+        if (allArrived && GAME.partyState.gfStage === 3) {
+            GAME.mode = 'ENDING';
+            gf.hasCake = false;
+            SCENE.cakeObj = { x: gf.x+4, y: gf.y+8 };
+            player.x = 90; player.y = 100; player.animTimer = 0;
+        }
+    }
+    else if (GAME.mode === 'ENDING') {
+        if (!GAME.partyState.melodyPlayed) { startBirthdayLoop(); GAME.partyState.melodyPlayed = true; }
+    }
+    else if (GAME.mode === 'PHOTO_OP') {
+        GAME.photoOp.timer++;
+        if (GAME.photoOp.phase === 'flash') {
+            if (GAME.photoOp.timer > 10) { GAME.photoOp.phase = 'develop'; GAME.photoOp.timer = 0; }
+        } else if (GAME.photoOp.phase === 'develop') {
+            if (GAME.photoOp.timer > 150) { GAME.mode = 'FINAL_SHOWCASE'; }
+        }
+    }
+}
+
+    // --- 5. 渲染系统 ---
+    function drawText(str, x, y, color='#fff', align='left') {
+        ctx.font = '10px Courier New'; 
+        ctx.textAlign = align;
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = '#000';
+        ctx.fillText(str, Math.floor(x)+1, Math.floor(y)+1);
+        ctx.fillStyle = color;
+        ctx.fillText(str, Math.floor(x), Math.floor(y));
+    }
+
+    function drawSprite(matrix, px, py, colors, bounce=0) {
+        const drawY = Math.floor(py + bounce); 
+        const drawX = Math.floor(px);
+        for(let y=0; y<16; y++) {
+            for(let x=0; x<16; x++) {
+                let c = matrix[y][x];
+                if(c !== 0) { ctx.fillStyle = colors[c] || '#f0f'; ctx.fillRect(drawX+x, drawY+y, 1, 1); }
+            }
+        }
+    }
+
+    function drawCake(px, py) {
+        for(let y=0; y<8; y++) {
+            for(let x=0; x<8; x++) {
+                let c = SPRITE_CAKE[y][x];
+                if(c === 1) ctx.fillStyle = P.cakeBase; else if (c === 2) ctx.fillStyle = P.cakeIce; else continue;
+                ctx.fillRect(Math.floor(px+x), Math.floor(py+y), 1, 1);
+            }
+        }
+        ctx.fillStyle = '#E91E63'; ctx.fillRect(Math.floor(px)+2, Math.floor(py), 1, 2); ctx.fillRect(Math.floor(px)+5, Math.floor(py), 1, 2);
+        if (Math.floor(Date.now()/100)%2 === 0) {
+            ctx.fillStyle = P.flame; ctx.fillRect(Math.floor(px)+2, Math.floor(py)-1, 1, 1); ctx.fillRect(Math.floor(px)+5, Math.floor(py)-1, 1, 1);
+        }
+    }
+
+    function drawBox(x, y, w, h, bg=P.uiBg) { 
+        x=Math.floor(x); y=Math.floor(y); w=Math.floor(w); h=Math.floor(h);
+        ctx.fillStyle = bg; ctx.fillRect(x, y, w, h); ctx.strokeStyle = P.uiBorder; ctx.lineWidth = 2; ctx.strokeRect(x+1, y+1, w-2, h-2); 
+    }
+
+    function drawBigText(text, x, y, color) {
+        ctx.fillStyle = color;
+        const scale = 2;
+        const font = {
+            'H':[[1,0,1],[1,0,1],[1,1,1],[1,0,1],[1,0,1]], 'A':[[0,1,0],[1,0,1],[1,1,1],[1,0,1],[1,0,1]], 'P':[[1,1,0],[1,0,1],[1,1,1],[1,0,0],[1,0,0]],
+            'Y':[[1,0,1],[1,0,1],[0,1,0],[0,1,0],[0,1,0]], 'B':[[1,1,0],[1,0,1],[1,1,0],[1,0,1],[1,1,0]], 'I':[[1],[1],[1],[1],[1]],
+            'R':[[1,1,0],[1,0,1],[1,1,0],[1,0,1],[1,0,1]], 'T':[[1,1,1],[0,1,0],[0,1,0],[0,1,0],[0,1,0]], 'D':[[1,1,0],[1,0,1],[1,0,1],[1,0,1],[1,1,0]],
+            '!':[[1],[1],[1],[0],[1]], ' ': [[0,0],[0,0],[0,0],[0,0],[0,0]]
+        };
+        let curX = Math.floor(x);
+        for(let i=0; i<text.length; i++) {
+            let char = font[text[i]] || font[' '];
+            for(let r=0; r<5; r++) { for(let c=0; c<char[r].length; c++) { if(char[r][c]) ctx.fillRect(curX + c*scale, Math.floor(y) + r*scale, scale, scale); } }
+            curX += (char[0].length + 1) * scale;
+        }
+    }
+
+    function drawScene() {
+        ctx.fillStyle = P.wall; ctx.fillRect(0,0,200,30);
+        ctx.fillStyle = P.floor; ctx.fillRect(0,30,200,120);
+        ctx.fillStyle = P.skirt; ctx.fillRect(0,29,200,1);
+        ctx.fillStyle = '#A1887F'; ctx.fillRect(0, 60, 10, 40);
+
+        ctx.save(); ctx.beginPath(); ctx.rect(SCENE.window.x, SCENE.window.y, SCENE.window.w, SCENE.window.h);
+        ctx.fillStyle = P.outside; ctx.fill(); ctx.strokeStyle = '#3E2723'; ctx.stroke(); ctx.clip();
+        ctx.fillStyle = P.snow; snowflakes.forEach(p => ctx.fillRect(Math.floor(p.x), Math.floor(p.y), 2, 2)); ctx.restore();
+
+        SCENE.cards.forEach(c => {
+            if(!c.collected) {
+                const glow = Math.sin(Date.now() / 150) * 0.3 + 0.5;
+                ctx.fillStyle = `rgba(255, 215, 0, ${glow})`;
+                ctx.fillRect(Math.floor(c.x)-2, Math.floor(c.y)-2, 9, 8); 
+            }
+        });
+
+        const b = SCENE.furniture.find(f => f.type === 'bench_v'); ctx.fillStyle = P.wood; ctx.fillRect(b.x, b.y, b.w, b.h); ctx.fillStyle = 'rgba(0,0,0,0.1)'; ctx.fillRect(b.x, b.y, 2, b.h);
+        SCENE.furniture.filter(f=>f.type==='stool').forEach(s => { ctx.fillStyle = P.steel; ctx.fillRect(s.x+4, s.y, 2, 10); ctx.fillStyle = P.steelHi; ctx.beginPath(); ctx.arc(s.x+5, s.y, 5, 0, Math.PI*2); ctx.fill(); });
+
+        const renderList = SCENE.npcs.map(n => {
+            let currentSprite = n.sprite;
+            let bounce = 0;
+            if(n.id === 'gf' && n.animTimer > 0) {
+                const frame = Math.floor(n.animTimer / 10) % 2;
+                currentSprite = (frame === 0) ? SPRITE_FEMALE_WALK1 : SPRITE_FEMALE_WALK2;
+                bounce = (frame === 0) ? 0 : -1;
+            }
+            return {...n, isNpc:true, drawSprite: currentSprite, bounce};
+        });
+
+        let playerSprite = SPRITE_PLAYER_STAND;
+        let playerBounce = 0;
+        if (player.animTimer > 0) {
+            const frame = Math.floor(player.animTimer / 10) % 2;
+            playerSprite = (frame === 0) ? SPRITE_PLAYER_WALK1 : SPRITE_PLAYER_WALK2;
+            playerBounce = (frame === 0) ? 0 : -1;
+        }
+        renderList.push({ x: player.x, y: player.y + (player.jumpY || 0), type: 'player', drawSprite: playerSprite, colors: player.colors, bounce: playerBounce });
+
+
+        const counter = SCENE.furniture.find(f=>f.type==='counter'); renderList.push({ y: counter.y + 10, type: 'counter_render', obj: counter });
+        if(SCENE.cakeObj) renderList.push({ ...SCENE.cakeObj, type:'cake_render', y: SCENE.cakeObj.y+4 }); 
+
+        renderList.sort((a,b) => a.y - b.y);
+
+        renderList.forEach(item => {
+            if(item.type === 'counter_render') {
+                const c = item.obj; ctx.fillStyle = P.wood; ctx.fillRect(c.x, c.y+12, c.w, 8); ctx.fillStyle = P.glass; ctx.fillRect(c.x, c.y, c.w, 18);
+                ctx.fillStyle = '#FFD54F'; ctx.fillRect(c.x+20, c.y+8, 10, 5); ctx.fillStyle = '#F48FB1'; ctx.fillRect(c.x+45, c.y+8, 10, 5); ctx.fillStyle = '#795548'; ctx.fillRect(c.x+70, c.y+8, 10, 5);
+                ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(c.x, c.y+2, c.w, 2);
+            } else if (item.type === 'cake_render') {
+                drawCake(item.x, item.y);
+                        } else {
+                drawSprite(item.drawSprite, item.x, item.y, item.colors, item.bounce || 0);
+
+                // =========== 【新增代码】给汤汤(id: gf)画黄色帽子 ===========
+                if (item.id === 'gf') {
+                    // 获取当前绘制坐标，包含走路时的弹跳(bounce)
+                    const hx = Math.floor(item.x);
+                    const hy = Math.floor(item.y + (item.bounce || 0));
+
+                    ctx.fillStyle = '#FFC610'; // 鲜亮的黄色
+                    
+                    // 1. 绘制帽檐 (宽一点，位置在头顶略下)
+                    // x+3 到 x+12 (宽10像素), y-1 (比头顶高1像素)
+                    ctx.fillRect(hx + 3, hy - 1, 8, 2); 
+
+                    // 2. 绘制帽顶 (窄一点，高一点)
+                    // x+5 到 x+10 (宽6像素), y-4 (比帽檐再高3像素)
+                    ctx.fillRect(hx + 4, hy - 2, 6, 1);
+                }
+                // =========================================================
+
+                if (item.hasCake) drawCake(item.x+4, item.y+8 + (item.bounce||0));
+                
+                if(GAME.mode === 'PLAYING' && item.isNpc) {
+
+                    let iconType = null;
+                    if (!GAME.stats.talkedNpcs.has(item.id) || (item.id === 'cust' && GAME.stats.miniGameWon && !GAME.stats.hiddenSecretRead)) iconType = '!';
+                    if (item.id === 'gf' && GAME.stats.allTasksDone) iconType = 'heart';
+                    
+                    if(iconType) {
+                        const offset = Math.floor(Date.now()/300)%2;
+                        if(iconType === '!') { ctx.fillStyle = '#FFD54F'; ctx.fillRect(item.x+6, item.y-6-offset, 2, 4); ctx.fillRect(item.x+6, item.y-1-offset, 2, 1); } 
+                        else { 
+                            ctx.fillStyle = '#FF5252'; 
+                            ctx.fillRect(item.x+3, item.y-8-offset, 2, 1); ctx.fillRect(item.x+6, item.y-8-offset, 2, 1);
+                            ctx.fillRect(item.x+2, item.y-7-offset, 7, 1);
+                            ctx.fillRect(item.x+2, item.y-6-offset, 7, 1);
+                            ctx.fillRect(item.x+3, item.y-5-offset, 5, 1);
+                            ctx.fillRect(item.x+4, item.y-4-offset, 3, 1);
+                            ctx.fillRect(item.x+5, item.y-3-offset, 1, 1);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, 200, 150);
+        
+        if (GAME.mode === 'FINAL_SHOWCASE') {
+            ctx.fillStyle = '#111'; ctx.fillRect(0,0,200,150);
+            ctx.fillStyle = '#eee'; ctx.fillRect(50, 10, 100, 120);
+            ctx.fillStyle = '#222'; ctx.fillRect(55, 15, 90, 90);
+            
+            ctx.save();
+            ctx.translate(55, 15);
+            ctx.scale(90/200, 90/150); 
+            drawScene(); 
+            ctx.restore();
+
+            if(Math.floor(Date.now()/600)%2===0) {
+                drawText("[PRESS SPACE TO REPLAY]", 30, 140, '#fff');
+            }
+            return;
+        }
+
+        drawScene();
+        
+        GAME.vfx.forEach(item => {
+            let vx = Math.floor(item.x);
+            let vy = Math.floor(item.y + item.offset);
+
+            if(item.type === 'envelope') {
+                ctx.fillStyle = '#FFF'; 
+                ctx.fillRect(vx, vy, 8, 5); 
+                ctx.fillStyle = '#DDD'; 
+                ctx.fillRect(vx, vy, 8, 1); ctx.fillRect(vx, vy+4, 8, 1); ctx.fillRect(vx, vy, 1, 5); ctx.fillRect(vx+7, vy, 1, 5);
+                ctx.fillStyle = '#FF5252'; 
+                ctx.fillRect(vx+3, vy+2, 2, 1);
+            } else {
+                ctx.fillStyle = '#FFF'; ctx.fillRect(vx, vy, 7, 7);
+                ctx.fillStyle = (item.type==='note'?'#448AFF':'#FF5252'); 
+                if(item.type==='note') { ctx.fillRect(vx+2, vy+1, 1, 4); ctx.fillRect(vx+3, vy+1, 2, 1); ctx.fillRect(vx+5, vy+2, 1, 1); }
+            }
+        });
+        
+        if (GAME.toast.timer > 0) {
+            drawText(GAME.toast.text, 100, 135, '#fff', 'center');
+        }
+
+        if(GAME.mode === 'DIALOG') {
+            drawBox(10, 110, 180, 35);
+            drawText(GAME.dialog.targetName + ":", 15, 118, '#FFD54F');
+            drawText(GAME.dialog.displayBuffer, 15, 130, '#fff');
+            if(Math.floor(Date.now()/500)%2===0) { ctx.fillStyle = '#FFD54F'; ctx.fillRect(180, 135, 4, 4); }
+        }
+        if(GAME.mode === 'MINIGAME') {
+            ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0,0,200,150);
+            const mx=50, my=50, mw=100, mh=40; drawBox(mx, my, mw, mh);
+            
+            if(!GAME.miniGame.result) {
+                drawText("剑玉挑战! [A]", mx+10, my+12); // 修改提示文字 Space -> A
+                ctx.fillStyle = '#555'; ctx.fillRect(mx+10, my+25, 80, 6);
+                const z = GAME.miniGame.targetZone; ctx.fillStyle = '#4CAF50'; ctx.fillRect(Math.floor(mx+10 + (z.start/100)*80), my+25, Math.floor((z.end-z.start)/100*80), 6);
+                const ptrX = mx+10 + (GAME.miniGame.pos/100)*80; ctx.fillStyle = '#FF5252'; ctx.fillRect(Math.floor(ptrX)-1, my+22, 2, 12);
+            } else {
+                if(GAME.miniGame.result === 'SUCCESS') { 
+                    drawText("止剑成功!", mx+25, my+20, '#4CAF50');
+                } else { 
+                    drawText("再试一次...", mx+25, my+20, '#FF5252');
+                }
+                ctx.fillRect(mx+5, my+5, 90, 2); 
+            }
+        }
+        if(GAME.mode === 'ENDING' && GAME.mode !== 'PHOTO_OP') {
+            ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(0,0,200,150);
+            drawBigText("HAPPY", 80, 40, '#FFD54F');
+            drawBigText("BIRTHDAY!", 70, 55, '#FF5252');
+            if(Math.floor(Date.now()/500)%2===0) {
+                drawText("[PRESS A]", 75, 100); // 修改文字 Space -> A
+            }
+        }
+        
+        if(GAME.mode === 'PHOTO_OP') {
+            const ph = GAME.photoOp;
+            if (ph.phase === 'flash') {
+                const alpha = 1 - (ph.timer / 10);
+                ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+                ctx.fillRect(0,0,200,150);
+            } 
+            if (ph.phase === 'develop') {
+                ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0,0,200,150);
+                let photoY = -120;
+                if (ph.timer < 30) photoY = -120 + (ph.timer * 4); else photoY = 10;
+                
+                ctx.fillStyle = '#eee'; ctx.fillRect(50, photoY, 100, 120);
+                ctx.fillStyle = '#222'; ctx.fillRect(55, photoY+5, 90, 90);
+                
+                if (photoY === 10) { 
+                    let opacity = (ph.timer - 30) / 60;
+                    if (opacity > 1) opacity = 1; else if (opacity < 0) opacity = 0;
+                    
+                    ctx.save();
+                    ctx.translate(55, photoY+5);
+                    ctx.scale(90/200, 90/150);
+                    ctx.globalAlpha = opacity;
+                    drawScene();
+                    ctx.restore();
+                }
+            }
+        }
+    }
+
+
+    /* =========================================
+       2. 输入管理器 (Input Manager - 整合版)
+       ========================================= */
+    class InputManager {
+        constructor() {
+            this.buttons = document.querySelectorAll('.zone, .ab-btn, .pill-btn');
+            this.initListeners();
+        }
+
+        initListeners() {
+            document.addEventListener('contextmenu', e => e.preventDefault());
+
+            // 1. 触摸支持
+            this.buttons.forEach(btn => {
+                const key = btn.dataset.key;
+                
+                const startAction = (e) => {
+                    e.preventDefault();
+                    this.visualPress(btn, true);
+                    this.triggerGameInput(key, true); // 直接触发游戏逻辑
+                };
+
+                const endAction = (e) => {
+                    e.preventDefault();
+                    this.visualPress(btn, false);
+                    this.triggerGameInput(key, false);
+                };
+
+                btn.addEventListener('touchstart', startAction, { passive: false });
+                btn.addEventListener('mousedown', startAction);
+                btn.addEventListener('touchend', endAction);
+                btn.addEventListener('mouseup', endAction);
+                btn.addEventListener('mouseleave', endAction);
+            });
+
+            // 2. 键盘支持 (PC端)
+            window.addEventListener('keydown', (e) => {
+                if(e.repeat) return; // 防止长按重复触发事件逻辑
+                
+                // 映射物理键盘到虚拟按键视觉
+                let visualKey = e.key;
+                if(e.key === ' ') visualKey = ' '; // 空格
+                if(e.key.toLowerCase() === 'z') visualKey = 'z';
+                if(e.key === 'ArrowUp') visualKey = 'ArrowUp';
+                // ... 其他键位
+                
+                // 同步视觉
+                const btn = document.querySelector(`[data-key="${visualKey}"]`);
+                if(btn) this.visualPress(btn, true);
+
+                // 触发游戏
+                this.handlePhysicalKey(e.key, true);
+            });
+
+            window.addEventListener('keyup', (e) => {
+                let visualKey = e.key;
+                if(e.key.toLowerCase() === 'z') visualKey = 'z';
+                
+                const btn = document.querySelector(`[data-key="${visualKey}"]`);
+                if(btn) this.visualPress(btn, false);
+
+                this.handlePhysicalKey(e.key, false);
+            });
+        }
+
+        // 处理物理键盘的 WASD 和 Arrows，统一发给游戏
+        handlePhysicalKey(key, isPressed) {
+            const k = key.toLowerCase();
+            if(k === 'w' || k === 'arrowup') this.triggerGameInput('ArrowUp', isPressed);
+            if(k === 's' || k === 'arrowdown') this.triggerGameInput('ArrowDown', isPressed);
+            if(k === 'a' || k === 'arrowleft') this.triggerGameInput('ArrowLeft', isPressed);
+            if(k === 'd' || k === 'arrowright') this.triggerGameInput('ArrowRight', isPressed);
+            if(k === ' ' || k === 'enter') this.triggerGameInput(' ', isPressed);
+        }
+
+        // 直接修改游戏原本的 `keys` 对象
+        triggerGameInput(virtualKey, isPressed) {
+            // 映射 Virtual Key -> Game Logic
+            if(virtualKey === 'ArrowUp')    keys.w = isPressed;
+            if(virtualKey === 'ArrowDown')  keys.s = isPressed;
+            if(virtualKey === 'ArrowLeft')  keys.a = isPressed;
+            if(virtualKey === 'ArrowRight') keys.d = isPressed;
+            
+            // 交互键 (A键 / 空格)
+            if(virtualKey === ' ' && isPressed) {
+                handleInteraction();
+            }
+        }
+
+        visualPress(element, isPressed) {
+            if (isPressed) element.classList.add('btn-active');
+            else element.classList.remove('btn-active');
+        }
+    }
+
+    new InputManager();
+
+
+    /* =========================================
+       3. 视口适配器 (Viewport Adapter)
+       ========================================= */
+    function resizeGameBoy() {
+        const container = document.getElementById('gameboy-container');
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+        const baseWidth = 320; 
+        const baseHeight = 540;
+        const margin = 20;
+        const scaleX = (windowWidth - margin) / baseWidth;
+        const scaleY = (windowHeight - margin) / baseHeight;
+        let scale = Math.min(scaleX, scaleY);
+        if (scale > 1.2) scale = 1.2; // 稍微限制最大倍数
+        container.style.transform = `scale(${scale})`;
+    }
+
+    window.addEventListener('resize', resizeGameBoy);
+    resizeGameBoy();
+    initGame();
+    function loop() { update(); draw(); requestAnimationFrame(loop); }
+    loop();
+
+</script>
+</body>
+</html>
