@@ -51,6 +51,8 @@
         }
 
         .screen-lens {
+  background: linear-gradient(135deg, var(--gb-screen-lens) 0%, #686d79 50%, var(--gb-screen-lens) 100%);
+    overflow: hidden; /* 防止反光溢出 */
             width: 280px; height: 220px; /* 稍微加高以容纳你的 200x150 画面 */
             background-color: var(--gb-screen-lens);
             border-radius: 10px 10px 30px 10px;
@@ -59,6 +61,25 @@
             padding-top: 25px;
             box-shadow: inset 2px 2px 5px rgba(0,0,0,0.3);
         }
+/* 可以在 lens 上加一个更明显的高光条 */
+.screen-lens::before {
+    content: "";
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: linear-gradient(to bottom right, rgba(255,255,255,0) 40%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0) 60%);
+    pointer-events: none;
+}
+
+/* 2. 机身增加更深的立体投影 */
+#gameboy-container {
+    /* ...原有属性... */
+    /* 优化投影，使其看起来更厚重 */
+    box-shadow: 
+        inset 4px 4px 10px rgba(255,255,255,0.5), /* 左上高光 */
+        inset -4px -4px 10px rgba(0,0,0,0.2),    /* 右下内阴影 */
+        5px 10px 25px rgba(0,0,0,0.6);           /* 外部落地影 */
+}
 
         .lens-strip {
             position: absolute; top: 10px; width: 90%; display: flex; justify-content: space-between; align-items: center;
@@ -136,13 +157,19 @@
             pointer-events: none;
             display: flex; flex-direction: column; gap: 2px;
         }
-        .tag {
-            background: rgba(0,0,0,0.8); padding: 2px 4px; border-radius: 2px;
-            color: #fff; font-size: 10px; border-left: 2px solid #FFD54F; /* 字体改小一点 */
-            text-shadow: 1px 1px 0 #000;
-            font-weight: normal; 
-            font-family: 'Courier New', monospace;
-        }
+        /* 小标签：降低透明度，缩小字体 */
+.tag {
+    background: rgba(0,0,0,0.35);
+    padding: 2px 4px;
+    border-radius: 2px;
+    color: #fff;
+    font-size: 8px; /* 由 10px 降到 8px */
+    border-left: 2px solid #FFD54F;
+    text-shadow: 1px 1px 0 #000;
+    font-weight: normal;
+    font-family: 'Courier New', monospace;
+}
+
         #click-to-start {
             position: absolute; top:0; left:0; width:100%; height:100%;
             background: rgba(0,0,0,0.85); color:#fff; display: flex;
@@ -170,12 +197,8 @@
 
             <div class="game-display" id="game-display">
                 <canvas id="gameCanvas" width="200" height="150"></canvas>
-                <div class="ui-layer">
-                    <div class="tag" id="ui-cards">Cards: 0/3</div>
-                    <div class="tag" id="ui-state">Tasks: 0/6</div>
-                </div>
-                <div id="click-to-start">点击屏幕<br>开启游戏</div>
-            </div>
+ 
+                  </div>
         </div>
 
         <div class="brand-logo">Spoon Gelato</span>&trade;</div>
@@ -213,29 +236,178 @@
     </div>
 
 <script>
+
     /* =========================================
        1. 你的游戏逻辑 (已移植并修改按键监听)
        ========================================= */
+// ================== 系统启动状态机 ==================
+const SYSTEM = {
+  state: 'LOGO',   // LOGO → TITLE → GAME
+  timer: 0,
+
+  // Logo 动画参数
+  logoY: -40,
+  logoVy: 0,
+  logoLanded: false,
+
+  blink: 0,
+  titleScrollY: 0
+};
+
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
-
-    const startOverlay = document.getElementById('click-to-start');
 
     // --- 0. 音频系统 ---
     let audioCtx = null;
     let audioStarted = false;
     let musicInterval = null;
+let bgmInterval = null;
+let bgmPlaying = false;
+let titleSnowflakes = Array.from({ length: 25 }, () => ({
+  x: Math.random() * 200,
+  y: Math.random() * 150,
+  speed: Math.random() * 0.3 + 0.1
+}));
+
+function start8BitBGM() {
+  if (!audioCtx || bgmPlaying) return;
+  bgmPlaying = true;
+
+  // === 冬日主旋律（低八度，triangle）===
+  const melody = [
+    { f: 196, d: 0.6 }, // G3
+    { f: 220, d: 0.6 }, // A3
+    { f: 196, d: 0.6 }, // G3
+    { f: 165, d: 0.8 }, // E3
+
+    { f: 175, d: 0.6 }, // F3
+    { f: 196, d: 1.0 }, // G3
+
+    { f: 147, d: 0.8 }, // D3
+    { f: 165, d: 0.6 }, // E3
+    { f: 175, d: 0.6 }, // F3
+    { f: 196, d: 1.2 }, // G3
+  ];
+
+  // === 极轻的呼吸式高音点缀（square，低音量）===
+  const sparkle = [
+    { f: 523, d: 0.15 },
+    { f: 587, d: 0.15 },
+  ];
+
+  let total = melody.reduce((s, n) => s + n.d + 0.15, 0);
+
+  const playLoop = () => {
+    let t = 0;
+
+    // 主旋律
+    melody.forEach(n => {
+      setTimeout(() => {
+        if (bgmPlaying) {
+          playTone(n.f, n.d, 'triangle', 0.05);
+        }
+      }, t * 1000);
+      t += n.d + 0.15;
+    });
+
+    // 冬日“空气感”点缀（非常轻）
+    sparkle.forEach((n, i) => {
+      setTimeout(() => {
+        if (bgmPlaying) {
+          playTone(n.f, n.d, 'square', 0.02);
+        }
+      }, (total - 1.2 + i * 0.6) * 1000);
+    });
+  };
+    // =========================================
+    // 【新增】点击窗户触发赏雪模式
+    // =========================================
+    canvas.addEventListener('mousedown', (e) => {
+        // 1. 获取 Canvas 在屏幕上的实际位置和缩放比例
+        const rect = canvas.getBoundingClientRect();
+        
+        // 游戏内部分辨率是 200x150
+        const scaleX = 200 / rect.width;
+        const scaleY = 150 / rect.height;
+
+        // 2. 计算点击在游戏画面内的坐标 (x, y)
+        const clickX = (e.clientX - rect.left) * scaleX;
+        const clickY = (e.clientY - rect.top) * scaleY;
+
+        // 3. 判断是否点中了窗户区域 (SCENE.window)
+        // SCENE.window 定义为 { x: 50, y: 5, w: 100, h: 20 }
+        // 注意：由于 update 里可能会动态修改 SCENE，这里直接用 SCENE.window 变量
+        const win = SCENE.window;
+        
+        if (clickX >= win.x && clickX <= win.x + win.w &&
+            clickY >= win.y && clickY <= win.y + win.h) {
+            
+            // 触发效果：增加雪花密度
+            if (GAME.snowTarget < 50) { // 防止重复点击
+                GAME.snowTarget = 80; // 目标密度设为 120 (大雪)
+                
+                // 给个提示文字
+                GAME.toast.text = "雪突然变大了 ...";
+                GAME.toast.timer = 80; // 显示 2 秒
+                
+                // 播放一个音效 (利用你现有的函数)
+                if(typeof playTone === 'function') {
+                    playTone(800, 0.1, 'triangle', 0.05);
+                    setTimeout(() => playTone(600, 0.2, 'triangle', 0.05), 100);
+                }
+
+                // 5秒后恢复正常
+                setTimeout(() => {
+                    GAME.snowTarget = 10; // 恢复到 10
+                    GAME.toast.text = "雪停了 ...";
+                    GAME.toast.timer = 60;
+                }, 5000);
+            }
+        }
+    });
+
+    // 这一行是你原文件的结尾
+    // loop(); 
+
+  playLoop();
+  bgmInterval = setInterval(playLoop, total * 1000);
+}
+
+function stop8BitBGM() {
+  bgmPlaying = false;
+  if (bgmInterval) {
+    clearInterval(bgmInterval);
+    bgmInterval = null;
+  }
+}
+
+function drawVerticalScanlines(intensity = 0.15, spacing = 2) {
+  ctx.fillStyle = `rgba(0,0,0,${intensity})`;
+  for (let x = 0; x < 200; x += spacing) {
+    ctx.fillRect(x, 0, 1, 150);
+  }
+}
 
     function initAudio() {
-        if (audioStarted) return;
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        audioStarted = true;
-        startOverlay.style.display = 'none';
-        // 开启电源灯
-        document.querySelector('.battery-led').style.boxShadow = "0 0 5px #4AFD03";
-        document.querySelector('.battery-led').style.backgroundColor = "#4AFD03";
-    }
+  if (audioStarted) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  audioStarted = true;
+
+  // 点亮电源灯（这一步保留，非常 GameBoy）
+  const led = document.querySelector('.battery-led');
+  led.style.boxShadow = "0 0 5px #4AFD03";
+  led.style.backgroundColor = "#4AFD03";
+}
+
+function playBootClick() {
+  if (!audioCtx) return;
+
+  // “咔”
+  playTone(420, 0.05, 'square', 0.2);
+  // “哒”
+  setTimeout(() => playTone(260, 0.08, 'square', 0.15), 60);
+}
 
     function playTone(freq, duration, type='square', vol=0.1) {
         if (!audioCtx) return;
@@ -270,38 +442,85 @@
         gain.connect(audioCtx.destination);
         noise.start();
     }
-
-    function startBirthdayLoop() {
-        if (musicInterval) return;
-        const notes = [
-            {f:261, d:0.2}, {f:261, d:0.2}, {f:293, d:0.4}, {f:261, d:0.4}, {f:349, d:0.4}, {f:329, d:0.8},
-            {f:261, d:0.2}, {f:261, d:0.2}, {f:293, d:0.4}, {f:261, d:0.4}, {f:392, d:0.4}, {f:349, d:0.8},
-            {f:261, d:0.2}, {f:261, d:0.2}, {f:523, d:0.4}, {f:440, d:0.4}, {f:349, d:0.4}, {f:329, d:0.4}, {f:293, d:0.4},
-            {f:466, d:0.2}, {f:466, d:0.2}, {f:440, d:0.4}, {f:349, d:0.4}, {f:392, d:0.4}, {f:349, d:0.8} 
-        ];
-        let totalDuration = 0;
-        notes.forEach(n => totalDuration += n.d + 0.05);
-        
-        const playMelody = () => {
-            let time = 0;
-            notes.forEach(n => {
-                setTimeout(() => {
-                    if(GAME.mode === 'ENDING' || GAME.mode === 'PHOTO_OP' || GAME.mode === 'FINAL_SHOWCASE') {
-                        playTone(n.f, n.d, 'triangle', 0.1);
-                    }
-                }, time * 1000);
-                time += n.d + 0.05;
-            });
-        };
-        playMelody();
-        musicInterval = setInterval(playMelody, totalDuration * 1000);
+    function playJingle() {
+        playTone(880, 0.1); setTimeout(() => playTone(1760, 0.2), 100);
     }
 
-    // 触摸点击遮罩初始化音频
-    startOverlay.addEventListener('click', initAudio);
-    startOverlay.addEventListener('touchstart', (e) => { e.preventDefault(); initAudio(); });
+    // [新增] 胜利时的急促上行音阶
+    function playWinArpeggio() {
+        if (!audioCtx) return;
+        // 快速播放 C Major 上行 (C5, E5, G5, C6)
+        const notes = [523.25, 659.25, 783.99, 1046.50]; 
+        notes.forEach((freq, i) => {
+            setTimeout(() => {
+                playTone(freq, 0.1, 'square', 0.15);
+            }, i * 60); // 间隔60ms，非常急促
+        });
+    }
+function playTextBeep() {
+  if (!audioCtx) return;
 
-    // --- 1. 资源与配置 ---
+  // 10% 概率不响（GameBoy 会“漏音”）
+  if (Math.random() < 0.1) return;
+
+  const freq = 700 + Math.random() * 200; // 700~900Hz
+  playTone(freq, 0.02, 'square', 0.025);
+}
+
+
+    // 【修改后】音乐循环，增加了纸片喷射逻辑
+function startBirthdayLoop() {
+    if (musicInterval) return;
+    
+    // 定义音符：f=频率, d=时长(也是节奏强弱的依据)
+    const notes = [
+        {f:261, d:0.2}, {f:261, d:0.2}, {f:293, d:0.4}, {f:261, d:0.4}, {f:349, d:0.4}, {f:329, d:0.8},
+        {f:261, d:0.2}, {f:261, d:0.2}, {f:293, d:0.4}, {f:261, d:0.4}, {f:392, d:0.4}, {f:349, d:0.8},
+        {f:261, d:0.2}, {f:261, d:0.2}, {f:523, d:0.4}, {f:440, d:0.4}, {f:349, d:0.4}, {f:329, d:0.4}, {f:293, d:0.4},
+        {f:466, d:0.2}, {f:466, d:0.2}, {f:440, d:0.4}, {f:349, d:0.4}, {f:392, d:0.4}, {f:349, d:0.8} 
+    ];
+    
+    let totalDuration = 0;
+    notes.forEach(n => totalDuration += n.d + 0.05);
+    
+    const playMelody = () => {
+        let time = 0;
+        notes.forEach(n => {
+            setTimeout(() => {
+                // 只有在结局或合影模式下才播放
+                if(GAME.mode === 'ENDING' || GAME.mode === 'PHOTO_OP' || GAME.mode === 'FINAL_SHOWCASE') {
+                    playTone(n.f, n.d, 'triangle', 0.1);
+                    
+                    // 【新增】根据音符时长判断节奏强度，生成纸片
+                    // 长音符(d>=0.4)视为重拍，纸片更多
+                    const intensity = n.d >= 0.4 ? 10 : 3; 
+                    spawnConfetti(intensity); 
+                }
+            }, time * 1000);
+            time += n.d + 0.05;
+        });
+    };
+    playMelody();
+    musicInterval = setInterval(playMelody, totalDuration * 1000);
+}
+
+// 【新增】生成纸片的辅助函数
+function spawnConfetti(count) {
+    const colors = ['#FFC0CB', '#FFD700', '#ADFF2F', '#00BFFF', '#FF4500'];
+    for (let i = 0; i < count; i++) {
+        GAME.confetti.push({
+            x: Math.random() * 200,      // 全屏随机X
+            y: -5,                       // 从屏幕上方落下
+            vx: (Math.random() - 0.5) * 2, // 左右随机飘荡
+            vy: Math.random() * 1.5 + 1,   // 下落速度
+            color: colors[Math.floor(Math.random() * colors.length)],
+            life: 150                    // 存活时间
+        });
+    }
+}
+
+
+      // --- 1. 资源与配置 ---
     const P = {
         wall:'#F5E6CA', floor:'#E1C7A8', skirt:'#8D6E63', wood:'#8E4B26',
         glass:'rgba(225, 245, 254, 0.5)', snow:'#FFFFFF', outside:'#03162B',
@@ -333,7 +552,38 @@
 
 function initGame() {
     GAME = {
-        mode: 'PLAYING', 
+ // 【新增】控制雪花密度的变量
+        snowTarget: 10, // 初始密度：很低 (比如 10)
+        iceCream: {
+            active: false,
+            order: null,
+            input: [],
+            success: false
+        },
+
+         // 【修改 1】将模式改为 HAT_SELECT，并定义颜色
+        // ==========================================
+        mode: 'HAT_SELECT', // 原本是 'PLAYING'
+        
+        hatIndex: 0,
+        hatColor: '#D84315', // 默认深红
+        hatOptions: [
+            { name: 'RED',    hex: '#D84315' }, // 经典红
+            { name: 'YELLOW', hex: '#FFC107' }, // 活力黄
+            { name: 'BLUE',   hex: '#0C4F8A' }  // 沉稳蓝
+        ],
+        // ==========================================
+
+        screenShake: 0,
+confetti: [], 
+
+        stats: {
+            cards: 0, // 这个变量决定暖光程度
+            talkedNpcs: new Set(),
+            miniGameWon: false,
+            hiddenSecretRead: false,
+            allTasksDone: false 
+        },
         stats: {
             cards: 0,
             talkedNpcs: new Set(),
@@ -343,7 +593,22 @@ function initGame() {
         },
         chase: { active: false, timer: 0 }, 
         dialog: { text: "", displayBuffer: "", charIndex: 0, timer: 0, targetName: "" },
-        miniGame: { pos: 0, dir: 1, speed: 2.5, targetZone: { start: 42, end: 58 }, result: null, cooldown: 0 },
+         miniGame: { 
+            pos: 0, 
+            dir: 1, 
+            
+            // 【新增】难度标记，默认正常
+            difficulty: 'NORMAL', 
+            
+            // 初始速度 (正常: 2.5)
+            speed: 2.5, 
+            
+            // 初始判定区 (正常: 42-58，宽度16)
+            targetZone: { start: 42, end: 58 }, 
+            
+            result: null, 
+            cooldown: 0 
+        },
         vfx: [],
         partyState: { gfStage: 0, melodyPlayed: false },
         photoOp: { timer: 0, phase: 'idle' },
@@ -368,9 +633,13 @@ function initGame() {
             { x: 5, y: 65, collected: false }    
         ],
         npcs: [
-            { id: 'staff1', name: 'KDAE', x: 60, y: 130, sprite: SPRITE_FEMALE_STAND, colors: {1:P.hairDk, 2:P.skin, 3:P.ltBlue, 4:P.black}, msg: "生日快乐，帅是一种感觉！", targetPos: {x:70, y:80} },
+            { id: 'staff1', name: 'KDAE', x: 60, y: 130, sprite: SPRITE_FEMALE_STAND, colors: {1:P.hairDk, 2:P.skin, 3:P.ltBlue, 4:P.black}, dialogList: [
+    "生日快乐，帅是一种感觉！",
+    "店的角落里好像藏着几张贺卡哦。"
+  ],
+  dialogIdx: 0, targetPos: {x:70, y:80} },
             { id: 'staff2', name: '布河', x: 120, y: 130, sprite: SPRITE_FEMALE_STAND, colors: {1:P.hairDk, 2:P.skin, 3:P.gray, 4:P.black}, msg: "生日快乐，送你一坨粑粑冰淇淋。", targetPos: {x:130, y:80} },
-            { id: 'staff3', name: 'SHERBET LEMON', x: 97, y: 90, sprite: SPRITE_FEMALE_SIT, colors: {1:P.black, 2:P.skin, 3:P.pink, 4:P.white}, msg: "生日快乐!成为健康的冰淇淋大师吧！", targetPos: {x:90, y:73} },
+            { id: 'staff3', name: 'SHERBET LEMON', x: 99, y: 27, sprite: SPRITE_FEMALE_SIT, colors: {1:P.black, 2:P.skin, 3:P.pink, 4:P.white}, msg: "生日快乐!成为健康的冰淇淋大师吧！", targetPos: {x:90, y:73} },
             
             // === 汤汤：坐标 x:160, y:75 (避开障碍物) ===
             { 
@@ -385,7 +654,17 @@ function initGame() {
                 id: 'cust', name: 'BOO', x: 137, y: 50, sprite: SPRITE_FEMALE_SIT, colors: {1:P.black, 2:P.skin, 3:'#552961', 4:'#333'}, 
                 msg: "剑玉大师生日快乐。", msgWin: "少练点剑吧！", targetPos: {x:115, y:65},
                 wander: { timer: 0, dx: 0, dy: 0 } // 必须要有这个属性
+            },
+            // === 新NPC：Cherish ===
+            { 
+                id: 'cherish', name: 'Cherish', x: 35, y: 90, 
+                sprite: SPRITE_FEMALE_SIT, 
+                colors: {1:P.hairDk, 2:P.skin, 3:'#FFDE59', 4:'#BA3232'}, // 复制汤汤的配色
+                msg: "生日快乐，什么时候办活动？", 
+                targetPos: {x:50, y:85}, // 结局时的站位
+                wander: { timer: 0, dx: 0, dy: 0 } 
             }
+
         ],
         cakeObj: null 
     };
@@ -397,13 +676,11 @@ function initGame() {
         jumpY: 0, vy: 0 
     };
     
-    snowflakes = Array.from({length:40}, () => ({ 
+     snowflakes = Array.from({length: GAME.snowTarget}, () => ({ 
         x: Math.random()*SCENE.window.w + SCENE.window.x, 
         y: Math.random()*SCENE.window.h + SCENE.window.y, 
         speed: Math.random()*0.5+0.1 
     }));
-    
-    updateUI();
 }
     const keys = { w:false, a:false, s:false, d:false };
 
@@ -413,13 +690,25 @@ function initGame() {
     }
 
     function checkEndgameCondition() {
-        if (GAME.stats.cards === 3 && GAME.stats.talkedNpcs.size === 5 && GAME.stats.hiddenSecretRead) {
-            GAME.stats.allTasksDone = true;
-        }
-        updateUI();
+    // 完成条件：收集3张卡 + 6个NPC完整对话
+    if (GAME.stats.cards === 3 && GAME.stats.talkedNpcs.size === 6) {
+        GAME.stats.allTasksDone = true;
+    } else {
+        GAME.stats.allTasksDone = false;
     }
+}
+
 
      function startDialog(npc) {
+// === 布河：冰淇淋制作支线 ===
+if (npc.id === 'staff2' && !GAME.iceCream.success) {
+  GAME.mode = 'ICE_CREAM';
+  GAME.iceCream.active = true;
+  GAME.iceCream.order = ICE_CREAM_RECIPE;
+  GAME.iceCream.input = [];
+  return;
+}
+
     if (npc.id === 'gf' && GAME.stats.allTasksDone) {
         GAME.mode = 'PARTY_SEQUENCE';
         SCENE.npcs.forEach(n => { if(n.sprite === SPRITE_FEMALE_SIT) n.sprite = SPRITE_FEMALE_STAND; });
@@ -431,12 +720,11 @@ function initGame() {
     GAME.dialog.charIndex = 0; GAME.dialog.displayBuffer = ""; GAME.dialog.timer = 0;
     
     // === 逻辑：汤汤多段对话 ===
-    if (npc.id === 'gf' && npc.dialogList) {
-        if (npc.dialogIdx >= npc.dialogList.length) npc.dialogIdx = 0;
-        GAME.dialog.text = npc.dialogList[npc.dialogIdx];
-        // 注意：这里删除了 GAME.stats.talkedNpcs.add('gf')，
-        // 这样只要对话没进行到最后一句，感叹号就会一直存在。
-    } 
+    if (npc.dialogList) {
+    if (npc.dialogIdx >= npc.dialogList.length) npc.dialogIdx = 0;
+    GAME.dialog.text = npc.dialogList[npc.dialogIdx];
+}
+ 
     else if(npc.id === 'cust' && GAME.stats.miniGameWon) {
         GAME.dialog.text = npc.msgWin;
         GAME.stats.hiddenSecretRead = true;
@@ -445,8 +733,8 @@ function initGame() {
     } else {
         GAME.dialog.text = npc.msg;
         GAME.stats.talkedNpcs.add(npc.id); // 其他人正常消除感叹号
+        checkEndgameCondition();
     }
-    checkEndgameCondition();
 }
     function startMiniGame() {
         GAME.mode = 'MINIGAME';
@@ -456,17 +744,29 @@ function initGame() {
         GAME.miniGame.cooldown = 30; 
     }
 
-    function updateUI() {
-        document.getElementById('ui-cards').innerText = `Cards: ${GAME.stats.cards}/3`;
-        let tasks = GAME.stats.cards + GAME.stats.talkedNpcs.size + (GAME.stats.hiddenSecretRead?1:0);
-        document.getElementById('ui-state').innerText = `Tasks: ${tasks}/9`;
-    }
+const ICE_CREAM_RECIPE = {
+  name: "特殊口味冰淇淋",
+  seq: ['ArrowLeft', 'ArrowRight', 'A']
+};
 
-    function checkCollision(x, y) {
+        function checkCollision(x, y) {
         const pRect = { x: x+2, y: y+8, w: 10, h: 8 };
         for(let obj of SCENE.furniture) if(pRect.x < obj.x + obj.w && pRect.x + pRect.w > obj.x && pRect.y < obj.y + obj.h && pRect.y + pRect.h > obj.y) return true;
         if(GAME.mode !== 'PARTY_SEQUENCE' && GAME.mode !== 'ENDING' && GAME.mode !== 'FINAL_SHOWCASE') {
-            for(let npc of SCENE.npcs) if(pRect.x < npc.x + 12 && pRect.x + pRect.w > npc.x + 4 && pRect.y < npc.y + 16 && pRect.y + pRect.h > npc.y + 8) return true;
+            for (let npc of SCENE.npcs) {
+  // 追逐中：忽略汤汤的实体碰撞
+  if (npc.id === 'gf' && GAME.chase.active) continue;
+
+  if (
+    pRect.x < npc.x + 12 &&
+    pRect.x + pRect.w > npc.x + 4 &&
+    pRect.y < npc.y + 16 &&
+    pRect.y + pRect.h > npc.y + 8
+  ) {
+    return true;
+  }
+}
+
         }
         if (x < 0) return true;
         if (x > 200-14 || y < 30 || y > 150-14) return true;
@@ -490,7 +790,18 @@ function initGame() {
     }
 
        function handleInteraction() {
-    if (!audioStarted) return;
+
+  
+// === GameBoy 启动画面 → 正式游戏 ===
+if (SYSTEM && SYSTEM.state === 'TITLE') {
+  initAudio();          // ← 关键：第一次用户交互解锁音频
+  playTone(880, 0.1);   // ← 可选：确认音
+  SYSTEM.state = 'GAME';
+  initGame();
+start8BitBGM();
+  return;
+}
+
 
     // 1. 结局相册逻辑
     if (GAME.mode === 'FINAL_SHOWCASE') { initGame(); return; }
@@ -530,7 +841,7 @@ function initGame() {
                 if (npc.dialogIdx === 3) {
                     // 开启追逐
                     GAME.chase.active = true;
-                    GAME.chase.timer = 600; // 追逐持续约 10秒
+                    GAME.chase.timer = 400; // 追逐持续约 6秒
                     npc.sprite = SPRITE_FEMALE_STAND; // 确保她是站立贴图
                     
                     // 【关键点】在这里才标记为“已对话”，消除感叹号
@@ -547,6 +858,16 @@ function initGame() {
             }
 
             // 恢复游戏控制权
+if (npc && npc.dialogList && npc.id !== 'gf') {
+    npc.dialogIdx++;
+
+    if (npc.dialogIdx >= npc.dialogList.length) {
+        GAME.stats.talkedNpcs.add(npc.id);
+        checkEndgameCondition();
+    }
+}
+
+
             GAME.mode = 'PLAYING';
             
             // 如果是剑玉大师 BOO 且没赢过小游戏，触发小游戏
@@ -555,17 +876,34 @@ function initGame() {
         return;
     }
 
-    // 4. 小游戏逻辑
+        // 4. 小游戏逻辑
     if(GAME.mode === 'MINIGAME') {
         if(GAME.miniGame.result) { GAME.mode = 'PLAYING'; return; }
         if(GAME.miniGame.cooldown > 0) return;
         const p = GAME.miniGame.pos; const z = GAME.miniGame.targetZone;
+        
+        // --- 修改开始 ---
         if(p >= z.start && p <= z.end) {
-            GAME.miniGame.result = 'SUCCESS'; GAME.stats.miniGameWon = true;
-            spawnVFX('note', player.x+4, player.y-10); playJingle();
-        } else { GAME.miniGame.result = 'FAIL'; }
+            GAME.miniGame.result = 'SUCCESS'; 
+            GAME.stats.miniGameWon = true;
+            
+            // [修改] 1. 触发屏幕震动 (强度设为 10)
+            GAME.screenShake = 10; 
+            
+            // [修改] 2. 播放新的音效
+            spawnVFX('note', player.x+4, player.y-10); 
+            playWinArpeggio(); 
+            
+        } else { 
+            GAME.miniGame.result = 'FAIL'; 
+            // 失败时可以加一个小小的震动（可选）
+            GAME.screenShake = 3; 
+        }
+        // --- 修改结束 ---
+        
         return;
     }
+
 
     // 5. 寻找最近的NPC触发对话
     const pCenter = { x: player.x + 7, y: player.y + 7 };
@@ -580,7 +918,47 @@ function initGame() {
 
       function update() {
     // 1. 环境更新
-    snowflakes.forEach(p => { p.y += p.speed; if(p.y > SCENE.window.y + SCENE.window.h) { p.y = SCENE.window.y; p.x = Math.random()*SCENE.window.w + SCENE.window.x; } });
+
+// 【新增】更新纸片位置
+    if (GAME.confetti) {
+        GAME.confetti.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.life--;
+        });
+        // 移除超出屏幕或寿命结束的纸片
+        GAME.confetti = GAME.confetti.filter(p => p.y < 160 && p.life > 0);
+    }
+    if (GAME.screenShake > 0) {
+        GAME.screenShake *= 0.9; // 每次减弱 10%
+        if (GAME.screenShake < 0.5) GAME.screenShake = 0;
+    }
+    for (let i = snowflakes.length - 1; i >= 0; i--) {
+        let p = snowflakes[i];
+        p.y += p.speed;
+        
+        // 如果雪花落出了窗户底部
+        if (p.y > SCENE.window.y + SCENE.window.h) {
+            // 如果当前雪花数量 超过了 目标数量，这个雪花就消失（不重置）
+            if (snowflakes.length > GAME.snowTarget) {
+                snowflakes.splice(i, 1);
+            } else {
+                // 否则，循环利用，回到顶部
+                p.y = SCENE.window.y;
+                p.x = Math.random() * SCENE.window.w + SCENE.window.x;
+            }
+        }
+    }
+
+    // 2. 如果雪花不够，补充新的
+    if (snowflakes.length < GAME.snowTarget) {
+        // 每次补充一点点，制造渐变效果
+        snowflakes.push({
+            x: Math.random() * SCENE.window.w + SCENE.window.x,
+            y: SCENE.window.y, // 从窗户顶部生成
+            speed: Math.random() * 0.5 + 0.1
+        });
+    }
     GAME.vfx.forEach(v => { v.life--; v.offset -= 0.2; });
     GAME.vfx = GAME.vfx.filter(v => v.life > 0);
     if (GAME.toast.timer > 0) GAME.toast.timer--;
@@ -695,10 +1073,32 @@ function initGame() {
     } 
     // ================== 其他模式逻辑 ==================
     else if (GAME.mode === 'DIALOG') {
-        if(GAME.dialog.charIndex < GAME.dialog.text.length) {
-            GAME.dialog.timer++;
-            if(GAME.dialog.timer > 3) { GAME.dialog.displayBuffer += GAME.dialog.text[GAME.dialog.charIndex]; GAME.dialog.charIndex++; GAME.dialog.timer = 0; }
-        }
+        if (GAME.dialog.charIndex < GAME.dialog.text.length) {
+    GAME.dialog.timer++;
+
+    const currentChar = GAME.dialog.text[GAME.dialog.charIndex];
+
+    // === 基础速度 ===
+    let waitTime = 3; // 默认每 3 帧一个字（你原来的速度）
+
+    // === 标点停顿（GameBoy 灵魂）===
+    if ("，、".includes(currentChar)) waitTime = 6;
+    if ("。！？」".includes(currentChar)) waitTime = 10;
+    if ("…".includes(currentChar)) waitTime = 14;
+    if ("—".includes(currentChar)) waitTime = 12;
+
+    // === 微随机延迟（CPU 犹豫感）===
+    if (Math.random() < 0.05) waitTime += 3;
+
+    if (GAME.dialog.timer >= waitTime) {
+    GAME.dialog.displayBuffer += currentChar;
+    GAME.dialog.charIndex++;
+    GAME.dialog.timer = 0;
+
+    playTextBeep(); // ← 老 GameBoy 打字音
+}
+}
+
     }
     else if (GAME.mode === 'MINIGAME') {
         if(GAME.miniGame.cooldown > 0) GAME.miniGame.cooldown--;
@@ -746,8 +1146,13 @@ function initGame() {
         }
     }
     else if (GAME.mode === 'ENDING') {
-        if (!GAME.partyState.melodyPlayed) { startBirthdayLoop(); GAME.partyState.melodyPlayed = true; }
-    }
+  if (!GAME.partyState.melodyPlayed) {
+    stop8BitBGM();        // ⭐ 停掉日常 BGM
+    startBirthdayLoop(); // 🎂 生日歌
+    GAME.partyState.melodyPlayed = true;
+  }
+}
+
     else if (GAME.mode === 'PHOTO_OP') {
         GAME.photoOp.timer++;
         if (GAME.photoOp.phase === 'flash') {
@@ -793,6 +1198,32 @@ function initGame() {
             ctx.fillStyle = P.flame; ctx.fillRect(Math.floor(px)+2, Math.floor(py)-1, 1, 1); ctx.fillRect(Math.floor(px)+5, Math.floor(py)-1, 1, 1);
         }
     }
+
+function checkIceCreamResult() {
+  const need = GAME.iceCream.order.seq.join(',');
+  const got  = GAME.iceCream.input.join(',');
+
+  if (need === got) {
+    GAME.iceCream.success = true;
+    GAME.mode = 'DIALOG';
+
+    const npc = SCENE.npcs.find(n => n.id === 'staff2');
+
+    GAME.dialog.text = "送你一坨粑粑冰淇淋！";
+    GAME.dialog.targetName = npc.name;
+    GAME.dialog.displayBuffer = "";
+    GAME.dialog.charIndex = 0;
+
+    GAME.stats.talkedNpcs.add('staff2');
+    checkEndgameCondition();
+
+    playWinArpeggio();
+  } else {
+    GAME.iceCream.input = [];
+    GAME.toast.text = "这也能错...";
+    GAME.toast.timer = 60;
+  }
+}
 
     function drawBox(x, y, w, h, bg=P.uiBg) { 
         x=Math.floor(x); y=Math.floor(y); w=Math.floor(w); h=Math.floor(h);
@@ -840,7 +1271,7 @@ function initGame() {
         const renderList = SCENE.npcs.map(n => {
             let currentSprite = n.sprite;
             let bounce = 0;
-            if(n.id === 'gf' && n.animTimer > 0) {
+            if((n.id === 'gf' || n.id === 'cherish' || n.id === 'cust') && n.animTimer > 0) {
                 const frame = Math.floor(n.animTimer / 10) % 2;
                 currentSprite = (frame === 0) ? SPRITE_FEMALE_WALK1 : SPRITE_FEMALE_WALK2;
                 bounce = (frame === 0) ? 0 : -1;
@@ -873,23 +1304,27 @@ function initGame() {
                         } else {
                 drawSprite(item.drawSprite, item.x, item.y, item.colors, item.bounce || 0);
 
-                // =========== 【新增代码】给汤汤(id: gf)画黄色帽子 ===========
-                if (item.id === 'gf') {
+                                // =========== 【修改代码】区分汤汤和Cherish的帽子颜色 ===========
+                if (item.id === 'gf' || item.id === 'cherish') {
                     // 获取当前绘制坐标，包含走路时的弹跳(bounce)
                     const hx = Math.floor(item.x);
                     const hy = Math.floor(item.y + (item.bounce || 0));
 
-                    ctx.fillStyle = '#FFC610'; // 鲜亮的黄色
+                    // --- 核心修改：在这里区分颜色 ---
+                    if (item.id === 'gf') {
+                        ctx.fillStyle = '#FFC610'; // 汤汤：黄色
+                    } else {
+                        ctx.fillStyle = '#BA3232'; // Cherish：红色 (你可以修改这里的颜色代码)
+                    }
                     
-                    // 1. 绘制帽檐 (宽一点，位置在头顶略下)
-                    // x+3 到 x+12 (宽10像素), y-1 (比头顶高1像素)
+                    // 1. 绘制帽檐
                     ctx.fillRect(hx + 3, hy - 1, 8, 2); 
 
-                    // 2. 绘制帽顶 (窄一点，高一点)
-                    // x+5 到 x+10 (宽6像素), y-4 (比帽檐再高3像素)
+                    // 2. 绘制帽顶
                     ctx.fillRect(hx + 4, hy - 2, 6, 1);
                 }
                 // =========================================================
+
 
                 if (item.hasCake) drawCake(item.x+4, item.y+8 + (item.bounce||0));
                 
@@ -916,10 +1351,107 @@ function initGame() {
             }
         });
     }
+function drawBootLogo() {
+  ctx.fillStyle = '#0b1c0b';
+  ctx.fillRect(0, 0, 200, 150);
+
+  ctx.fillStyle = '#9bbc0f';
+  ctx.font = 'bold 16px Courier New';
+  ctx.textAlign = 'center';
+
+  // === 重力下落 ===
+  if (!SYSTEM.logoLanded) {
+    SYSTEM.logoVy += 0.8;           // 重力
+    SYSTEM.logoY += SYSTEM.logoVy;
+
+    if (SYSTEM.logoY >= 60) {
+      SYSTEM.logoY = 60;
+      SYSTEM.logoVy *= -0.25;      // 回弹
+      SYSTEM.logoLanded = true;
+
+      playBootClick();             // 落地音
+    }
+  }
+
+  ctx.fillText('SPOON', 100, SYSTEM.logoY);
+  ctx.fillText('GELATO™', 100, SYSTEM.logoY + 18);
+}
+
+function drawTitleScreen() {
+  ctx.fillStyle = '#0b1c0b';
+  ctx.fillRect(0, 0, 200, 150);
+
+  // === 滚动雪景背景 ===
+  ctx.fillStyle = '#ffffff';
+  titleSnowflakes.forEach(p => {
+    p.y += p.speed;
+    if (p.y > 150) {
+      p.y = 0;
+      p.x = Math.random() * 200;
+    }
+    ctx.fillRect(Math.floor(p.x), Math.floor(p.y), 2, 2);
+  });
+
+  // === 标题文字 ===
+  ctx.fillStyle = '#9bbc0f';
+  ctx.font = 'bold 14px Courier New';
+  ctx.textAlign = 'center';
+  ctx.fillText('WINTER GELATO SHOP', 100, 45);
+
+  ctx.font = '10px Courier New';
+
+  SYSTEM.blink++;
+  if (Math.floor(SYSTEM.blink / 30) % 2 === 0) {
+    ctx.fillText('PRESS START', 100, 90);
+  }
+}
+
 
     function draw() {
+
         ctx.clearRect(0, 0, 200, 150);
-        
+// 【修改 2】绘制帽子选择界面
+        // ==========================================
+        if (GAME.mode === 'HAT_SELECT') {
+            // 1. 深色背景
+            ctx.fillStyle = '#111'; 
+            ctx.fillRect(0, 0, 200, 150);
+            
+            // 2. 标题
+            drawText("SELECT HAT COLOR", 100, 30, '#fff', 'center');
+
+            // 3. 预览方块 (主角的帽子)
+            const boxSize = 20;
+            const cx = 100 - boxSize/2;
+            const cy = 65;
+            
+            // 画一个小人轮廓示意
+            ctx.fillStyle = player.colors[1]; // 头发
+            ctx.fillRect(cx+2, cy+4, 16, 16);
+            ctx.fillStyle = player.colors[2]; // 脸
+            ctx.fillRect(cx+4, cy+8, 12, 10);
+            
+            // 画当前选中的帽子颜色
+            ctx.fillStyle = GAME.hatColor;
+            ctx.fillRect(cx, cy, boxSize, 6); // 帽檐
+            ctx.fillRect(cx+2, cy-4, 16, 4);  // 帽顶
+
+            // 4. 左右箭头
+            if (Math.floor(Date.now() / 400) % 2 === 0) {
+                drawText("<", 60, cy+5, '#FFD54F', 'center');
+                drawText(">", 140, cy+5, '#FFD54F', 'center');
+            }
+
+            // 5. 当前颜色名称
+            drawText(GAME.hatOptions[GAME.hatIndex].name, 100, 95, GAME.hatColor, 'center');
+
+            // 6. 提示文字
+            drawText("PRESS [A] TO START", 100, 125, '#999', 'center');
+            
+            return; // 阻止绘制后面的游戏画面
+        }
+        // ==========================================
+       
         if (GAME.mode === 'FINAL_SHOWCASE') {
             ctx.fillStyle = '#111'; ctx.fillRect(0,0,200,150);
             ctx.fillStyle = '#eee'; ctx.fillRect(50, 10, 100, 120);
@@ -936,8 +1468,43 @@ function initGame() {
             }
             return;
         }
+ // --- 修改开始：应用屏幕震动 ---
+        ctx.save(); // 保存当前画布状态
+        if (GAME.screenShake > 0) {
+            const dx = (Math.random() - 0.5) * GAME.screenShake;
+            const dy = (Math.random() - 0.5) * GAME.screenShake;
+            ctx.translate(dx, dy); // 偏移画布
+        }
+        
+        drawScene(); // 绘制场景
+        
+           
+   // ==========================================
+        // 【新增功能 1】绘制暖光遮罩
+        // ==========================================
+        if (GAME.stats.cards > 0) {
+            // 根据收集数量计算暖度：每张卡增加 0.1 的不透明度 (最大 0.3)
+            // 使用暖橙色 (255, 180, 50) 混合模式
+            const warmthOpacity = GAME.stats.cards * 0.1; 
+            
+            ctx.save();
+            ctx.globalCompositeOperation = 'overlay'; // 叠加模式，让颜色更自然融合
+            ctx.fillStyle = `rgba(255, 160, 60, ${warmthOpacity})`;
+            ctx.fillRect(0, 0, 200, 150);
+            ctx.restore();
+        }
 
-        drawScene();
+        // ==========================================
+        // 【新增功能 2】绘制彩色纸片
+        // ==========================================
+        if (GAME.confetti && GAME.confetti.length > 0) {
+            GAME.confetti.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.fillRect(Math.floor(p.x), Math.floor(p.y), 2, 2); // 2x2 像素的纸片
+            });
+        }
+
+        ctx.restore(); // 恢复画布状态 (震动结束)
         
         GAME.vfx.forEach(item => {
             let vx = Math.floor(item.x);
@@ -970,7 +1537,6 @@ function initGame() {
         if(GAME.mode === 'MINIGAME') {
             ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0,0,200,150);
             const mx=50, my=50, mw=100, mh=40; drawBox(mx, my, mw, mh);
-            
             if(!GAME.miniGame.result) {
                 drawText("剑玉挑战! [A]", mx+10, my+12); // 修改提示文字 Space -> A
                 ctx.fillStyle = '#555'; ctx.fillRect(mx+10, my+25, 80, 6);
@@ -980,11 +1546,25 @@ function initGame() {
                 if(GAME.miniGame.result === 'SUCCESS') { 
                     drawText("止剑成功!", mx+25, my+20, '#4CAF50');
                 } else { 
-                    drawText("再试一次...", mx+25, my+20, '#FF5252');
+                    drawText("风吹的...", mx+25, my+20, '#FF5252');
                 }
                 ctx.fillRect(mx+5, my+5, 90, 2); 
             }
         }
+if (GAME.mode === 'ICE_CREAM') {
+  drawBox(20, 40, 160, 60);
+
+  drawText("隐藏口味冰淇淋", 30, 48, '#FFD54F');
+  
+  drawText(
+    "输入：" + GAME.iceCream.input.join(' - '),
+    30,
+    72
+  );
+
+  drawText("← → B", 30, 86);
+}
+
         if(GAME.mode === 'ENDING' && GAME.mode !== 'PHOTO_OP') {
             ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(0,0,200,150);
             drawBigText("HAPPY", 80, 40, '#FFD54F');
@@ -1002,115 +1582,232 @@ function initGame() {
                 ctx.fillRect(0,0,200,150);
             } 
             if (ph.phase === 'develop') {
-                ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0,0,200,150);
-                let photoY = -120;
-                if (ph.timer < 30) photoY = -120 + (ph.timer * 4); else photoY = 10;
-                
-                ctx.fillStyle = '#eee'; ctx.fillRect(50, photoY, 100, 120);
-                ctx.fillStyle = '#222'; ctx.fillRect(55, photoY+5, 90, 90);
-                
-                if (photoY === 10) { 
-                    let opacity = (ph.timer - 30) / 60;
-                    if (opacity > 1) opacity = 1; else if (opacity < 0) opacity = 0;
-                    
-                    ctx.save();
-                    ctx.translate(55, photoY+5);
-                    ctx.scale(90/200, 90/150);
-                    ctx.globalAlpha = opacity;
-                    drawScene();
-                    ctx.restore();
-                }
-            }
+  ctx.fillStyle = 'rgba(0,0,0,0.8)';
+  ctx.fillRect(0,0,200,150);
+
+  // 相纸下滑
+  let photoY = -120;
+  if (ph.timer < 30) photoY = -120 + (ph.timer * 4);
+  else photoY = 10;
+
+  ctx.fillStyle = '#eee';
+  ctx.fillRect(50, photoY, 100, 120);
+
+  ctx.fillStyle = '#222';
+  ctx.fillRect(55, photoY+5, 90, 90);
+
+  if (photoY === 10) {
+    let opacity = (ph.timer - 30) / 60;
+    opacity = Math.max(0, Math.min(1, opacity));
+
+    ctx.save();
+    ctx.translate(55, photoY+5);
+    ctx.scale(90/200, 90/150);
+    ctx.globalAlpha = opacity;
+
+    drawScene();   // ← 原本画照片内容
+    ctx.restore();
+
+    // ⭐【新增】扫描线叠加
+    ctx.save();
+    ctx.translate(55, photoY+5);
+    ctx.scale(90/200, 90/150);
+    drawVerticalScanlines(0.12, 2);
+    ctx.restore();
+  }
+}
+
         }
     }
 
 
-    /* =========================================
-       2. 输入管理器 (Input Manager - 整合版)
+        /* =========================================
+       2. 输入管理器 (纯震动反馈版)
        ========================================= */
     class InputManager {
         constructor() {
+            // 获取页面上所有的虚拟按键元素
             this.buttons = document.querySelectorAll('.zone, .ab-btn, .pill-btn');
             this.initListeners();
         }
 
+        // --- 核心修改：只触发震动 ---
+        triggerHaptic() {
+            // 检测浏览器是否支持震动 API (主要针对 Android)
+            // iOS Safari 暂时不支持此 API，不会报错，只是没效果
+            if (typeof navigator.vibrate === 'function') {
+                // 震动 20ms，短促有力，模拟微动开关手感
+                navigator.vibrate(20); 
+            }
+        }
+
         initListeners() {
+            // 禁用右键菜单，防止长按弹出菜单干扰游戏
             document.addEventListener('contextmenu', e => e.preventDefault());
 
-            // 1. 触摸支持
+            // 1. 触摸/鼠标支持
             this.buttons.forEach(btn => {
                 const key = btn.dataset.key;
                 
                 const startAction = (e) => {
-                    e.preventDefault();
+                    // 阻止默认行为（如滚动、双击缩放、高亮选区）
+                    if (e.cancelable) e.preventDefault(); 
+                    
+                    // >>> 触发震动 <<<
+                    this.triggerHaptic();
+                    
+                    // 视觉效果：按键变深色
                     this.visualPress(btn, true);
-                    this.triggerGameInput(key, true); // 直接触发游戏逻辑
+                    // 逻辑效果：通知游戏引擎
+                    this.triggerGameInput(key, true); 
                 };
 
                 const endAction = (e) => {
-                    e.preventDefault();
+                    if (e.cancelable) e.preventDefault();
                     this.visualPress(btn, false);
                     this.triggerGameInput(key, false);
                 };
 
+                // 'passive: false' 是必须的，否则无法调用 preventDefault 阻止滚动
                 btn.addEventListener('touchstart', startAction, { passive: false });
                 btn.addEventListener('mousedown', startAction);
+                
                 btn.addEventListener('touchend', endAction);
                 btn.addEventListener('mouseup', endAction);
                 btn.addEventListener('mouseleave', endAction);
             });
 
-            // 2. 键盘支持 (PC端)
+            // 2. 物理键盘支持 (PC调试用)
             window.addEventListener('keydown', (e) => {
-                if(e.repeat) return; // 防止长按重复触发事件逻辑
+                if(e.repeat) return; 
                 
-                // 映射物理键盘到虚拟按键视觉
-                let visualKey = e.key;
-                if(e.key === ' ') visualKey = ' '; // 空格
-                if(e.key.toLowerCase() === 'z') visualKey = 'z';
-                if(e.key === 'ArrowUp') visualKey = 'ArrowUp';
-                // ... 其他键位
-                
-                // 同步视觉
+                // 映射物理按键到虚拟按键的视觉效果
+                let visualKey = this.mapPhysicalToVirtual(e.key);
                 const btn = document.querySelector(`[data-key="${visualKey}"]`);
+                
                 if(btn) this.visualPress(btn, true);
 
-                // 触发游戏
                 this.handlePhysicalKey(e.key, true);
             });
 
             window.addEventListener('keyup', (e) => {
-                let visualKey = e.key;
-                if(e.key.toLowerCase() === 'z') visualKey = 'z';
-                
+                let visualKey = this.mapPhysicalToVirtual(e.key);
                 const btn = document.querySelector(`[data-key="${visualKey}"]`);
+                
                 if(btn) this.visualPress(btn, false);
 
                 this.handlePhysicalKey(e.key, false);
             });
         }
 
-        // 处理物理键盘的 WASD 和 Arrows，统一发给游戏
+        // 辅助：映射物理按键名到 data-key 属性
+        mapPhysicalToVirtual(key) {
+            if(key === ' ') return ' ';
+            if(key.toLowerCase() === 'z') return 'z';
+            if(key === 'ArrowUp') return 'ArrowUp';
+            if(key === 'ArrowDown') return 'ArrowDown';
+            if(key === 'ArrowLeft') return 'ArrowLeft';
+            if(key === 'ArrowRight') return 'ArrowRight';
+            return key;
+        }
+
+        // 处理物理键盘逻辑
         handlePhysicalKey(key, isPressed) {
             const k = key.toLowerCase();
             if(k === 'w' || k === 'arrowup') this.triggerGameInput('ArrowUp', isPressed);
             if(k === 's' || k === 'arrowdown') this.triggerGameInput('ArrowDown', isPressed);
             if(k === 'a' || k === 'arrowleft') this.triggerGameInput('ArrowLeft', isPressed);
             if(k === 'd' || k === 'arrowright') this.triggerGameInput('ArrowRight', isPressed);
-            if(k === ' ' || k === 'enter') this.triggerGameInput(' ', isPressed);
+            if(k === ' ' || k === 'enter') this.triggerGameInput(' ', isPressed); // Start键
+            if(k === 'z') this.triggerGameInput('z', isPressed); // A键
+            if(k === 'x') this.triggerGameInput('x', isPressed); // B键(如果有)
+if(k === 'shift') this.triggerGameInput('Shift', isPressed);
         }
 
-        // 直接修改游戏原本的 `keys` 对象
         triggerGameInput(virtualKey, isPressed) {
-            // 映射 Virtual Key -> Game Logic
+ // 【修改 3】帽子选择模式的输入控制
+            // ==========================================
+            if (GAME.mode === 'HAT_SELECT' && isPressed) {
+                // 1. 左右切换
+                if (virtualKey === 'ArrowRight' || virtualKey === 'ArrowLeft') {
+                    const dir = (virtualKey === 'ArrowRight') ? 1 : -1;
+                    // 循环切换逻辑
+                    GAME.hatIndex = (GAME.hatIndex + dir + GAME.hatOptions.length) % GAME.hatOptions.length;
+                    
+                    // 更新临时颜色
+                    GAME.hatColor = GAME.hatOptions[GAME.hatIndex].hex;
+                    
+                    // 播放音效 (直接调用你现有的函数)
+                    if(typeof playTone === 'function') playTone(600, 0.05, 'square', 0.1);
+                }
+
+                // 2. 确认选择 (Z键=A键, 空格=Start, 回车=Start)
+                if (virtualKey === 'z' || virtualKey === ' ' || virtualKey === 'Enter') {
+                    // 应用颜色到主角身上 (player.colors[4] 是原本红色的部位)
+                    player.colors[4] = GAME.hatColor;
+                    
+                    // 进入游戏
+                    GAME.mode = 'PLAYING';
+                    
+                    // 播放确认音效
+                    if(typeof playTone === 'function') {
+                        playTone(880, 0.1, 'square', 0.1);
+                        setTimeout(() => playTone(1100, 0.2, 'square', 0.1), 100);
+                    }
+                }
+                return; // 阻止后续逻辑
+            }
+            // ==========================================
+
+            // 将输入映射到全局 keys 对象
             if(virtualKey === 'ArrowUp')    keys.w = isPressed;
             if(virtualKey === 'ArrowDown')  keys.s = isPressed;
             if(virtualKey === 'ArrowLeft')  keys.a = isPressed;
             if(virtualKey === 'ArrowRight') keys.d = isPressed;
             
-            // 交互键 (A键 / 空格)
+            // 处理交互键 (Start/A键)
             if(virtualKey === ' ' && isPressed) {
-                handleInteraction();
+                if(typeof handleInteraction === 'function') handleInteraction();
+            }
+
+            // ==================================================
+            // 【新增】SELECT 键 (Shift) 切换难度
+            // ==================================================
+            if (virtualKey === 'Shift' && isPressed) {
+                if (GAME && GAME.miniGame) {
+                    // 1. 切换状态
+                    const isNormal = (GAME.miniGame.difficulty === 'NORMAL');
+                    GAME.miniGame.difficulty = isNormal ? 'EASY' : 'NORMAL';
+
+                    // 2. 应用参数
+                    if (GAME.miniGame.difficulty === 'EASY') {
+                        GAME.miniGame.speed = 1.5;         // 简单：慢速
+                        GAME.miniGame.targetZone = { start: 30, end: 70 }; // 简单：大判定区
+                        GAME.toast.text = "难度: 简单 (EASY)";
+                        // 播放低沉提示音
+                        if(typeof playTone === 'function') playTone(600, 0.1, 'square', 0.1);
+                    } else {
+                        GAME.miniGame.speed = 2.5;         // 正常：快速
+                        GAME.miniGame.targetZone = { start: 42, end: 58 }; // 正常：小判定区
+                        GAME.toast.text = "难度: 正常 (NORMAL)";
+                        // 播放清脆提示音
+                        if(typeof playTone === 'function') playTone(800, 0.1, 'square', 0.1);
+                    }
+                    GAME.toast.timer = 60;
+                }
+            }
+            // ==================================================
+
+            // === 冰淇淋制作输入逻辑 (保持不变) ===
+            if (GAME.mode === 'ICE_CREAM' && isPressed) {
+                if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(virtualKey)) {
+                    GAME.iceCream.input.push(virtualKey);
+                }
+                // A 键（你这里是 z）
+                if (virtualKey === 'z') {
+                    GAME.iceCream.input.push('A');
+                    checkIceCreamResult();
+                }
             }
         }
 
@@ -1119,6 +1816,8 @@ function initGame() {
             else element.classList.remove('btn-active');
         }
     }
+
+
 
     new InputManager();
 
@@ -1142,9 +1841,36 @@ function initGame() {
 
     window.addEventListener('resize', resizeGameBoy);
     resizeGameBoy();
-    initGame();
-    function loop() { update(); draw(); requestAnimationFrame(loop); }
-    loop();
+   function loop() {
+  ctx.clearRect(0, 0, 200, 150);
+
+  // ====== 开机 LOGO ======
+  if (SYSTEM.state === 'LOGO') {
+    drawBootLogo();
+    SYSTEM.timer++;
+    if (SYSTEM.timer > 120) {
+      SYSTEM.state = 'TITLE';
+      SYSTEM.timer = 0;
+    }
+    requestAnimationFrame(loop);
+    return;
+  }
+
+  // ====== Title Screen ======
+  if (SYSTEM.state === 'TITLE') {
+    drawTitleScreen();
+    requestAnimationFrame(loop);
+    return;
+  }
+
+  // ====== 正式游戏 ======
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+
 
 </script>
 </body>
